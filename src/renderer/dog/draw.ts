@@ -298,49 +298,83 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
   }
 }
 
+export interface FrontView {
+  /** Tiempo en segundos: mueve patas y cola. */
+  t: number;
+  eyeOpen: number;
+  /** 0 = estirado (colgando o cayendo), 1 = sentado en el suelo. */
+  sit: number;
+  /** 0..1: pellejo de la nuca estirado hacia la mano. */
+  scruff: number;
+  /** 0..1: orejas levantadas por el aire al caer. */
+  earLift: number;
+}
+
+const mix = (a: number, b: number, k: number): number => a + (b - a) * k;
+
+/** Distancia desde la nuca hasta el punto más bajo del perro de frente, según cuán sentado está. */
+export function frontHeight(sit: number): number {
+  return mix(143, 107, sit);
+}
+
 /**
- * El perro visto de frente, colgando del pellejo. El origen es el punto de la
- * nuca del que lo sostienen; el cuerpo cuelga hacia abajo (+y).
- * `t` es el tiempo en segundos (mueve patas y cola) y `eyeOpen` permite parpadear.
+ * El perro visto de frente: colgando del pellejo, cayendo o sentado.
+ * El origen es la nuca; el cuerpo va hacia abajo (+y).
  */
-export function drawDogFront(ctx: Ctx, t: number, eyeOpen: number, pal: Palette = DACHSHUND): void {
+export function drawDogFront(ctx: Ctx, v: FrontView, pal: Palette = DACHSHUND): void {
   const O = pal.outline;
+  const k = v.sit;
   ctx.lineCap = 'round';
-  const kick = Math.sin(t * 7) * 2.5;
-  const tailX = Math.sin(t * 5) * 9;
+  const loose = 1 - k;
+  const kick = Math.sin(v.t * 7) * 2.5 * loose;
+  const tailWag = Math.sin(v.t * (5 + 7 * k)) * (9 - 3 * k);
+  const bodyEnd = mix(114, 84, k);
+  const bodyR = mix(17.5, 22, k);
 
-  // Cola, detrás de todo.
-  group(ctx, [{ path: (c) => capsule(c, 0, 122, 4.2, tailX, 146, 2) , fill: pal.fur }], O);
-
-  // Patas traseras colgando.
-  const hind = (side: number, k: number): Part[] => [
-    { path: (c) => capsule(c, side * 10, 112, 7.5, side * 13 + k, 134, 5.6), fill: pal.furDark },
-    { path: (c) => capsule(c, side * 13 + k, 136, 6, side * 13 + k, 137, 6), fill: pal.furDark },
-  ];
-  group(ctx, [...hind(-1, kick), ...hind(1, -kick)], O);
-
-  // Pellejo, cuerpo y cabeza como una sola silueta.
+  // Cola: cuelga entre las patas o asoma hacia un lado al sentarse.
   group(
     ctx,
-    [
-      { path: (c) => capsule(c, 0, 2, 3.8, 0, 14, 9), fill: pal.fur },
-      { path: (c) => capsule(c, 0, 62, 16.5, 0, 114, 17.5), fill: pal.fur },
-      { path: (c) => capsule(c, 0, 31, 22.5, 0, 31, 22.5), fill: pal.fur },
-    ],
+    [{
+      path: (c) => capsule(c, mix(0, 16, k), mix(122, 96, k), 4.2, mix(tailWag, 37, k), mix(146, 88 + tailWag * 0.6, k), 2),
+      fill: pal.fur,
+    }],
     O,
   );
 
+  // Patas traseras: colgando, o abiertas hacia adelante al sentarse.
+  const hind = (side: number, d: number): Part[] => {
+    const fx = side * mix(13, 27, k) + d, fy = mix(134, 99, k);
+    return [
+      { path: (c) => capsule(c, side * mix(10, 15, k), mix(112, 90, k), mix(7.5, 10, k), fx, fy, mix(5.6, 6.5, k)), fill: pal.furDark },
+      { path: (c) => capsule(c, fx, fy + 2, mix(6, 6.8, k), fx, fy + 3, mix(6, 6.8, k)), fill: pal.furDark },
+    ];
+  };
+  group(ctx, [...hind(-1, kick), ...hind(1, -kick)], O);
+
+  // Pellejo, cuerpo y cabeza como una sola silueta.
+  const main: Part[] = [
+    { path: (c) => capsule(c, 0, 62, 16.5, 0, bodyEnd, bodyR), fill: pal.fur },
+    { path: (c) => capsule(c, 0, 31, 22.5, 0, 31, 22.5), fill: pal.fur },
+  ];
+  if (v.scruff > 0.02) {
+    main.unshift({ path: (c) => capsule(c, 0, 14 - 12 * v.scruff, 3.8, 0, 14, 9), fill: pal.fur });
+  }
+  group(ctx, main, O);
+
   // Panza más clara.
   ctx.beginPath();
-  capsule(ctx, 0, 74, 8.5, 0, 112, 10.5);
+  capsule(ctx, 0, 74, 8.5, 0, mix(112, 90, k), mix(10.5, 13, k));
   ctx.fillStyle = pal.furLight;
   ctx.fill();
 
-  // Patas delanteras, flojas sobre el pecho.
-  const front = (side: number, k: number): Part[] => [
-    { path: (c) => capsule(c, side * 13, 66, 6.5, side * 15 + k, 88, 5.4), fill: pal.fur },
-    { path: (c) => capsule(c, side * 15 + k, 90, 5.8, side * 15 + k, 91, 5.8), fill: pal.fur },
-  ];
+  // Patas delanteras: flojas sobre el pecho, o apoyadas al medio al sentarse.
+  const front = (side: number, d: number): Part[] => {
+    const fx = side * mix(15, 8, k) + d, fy = mix(88, 97, k);
+    return [
+      { path: (c) => capsule(c, side * mix(13, 9, k), 66, 6.5, fx, fy, 5.4), fill: pal.fur },
+      { path: (c) => capsule(c, fx, fy + 2, 5.8, fx, fy + 3, 5.8), fill: pal.fur },
+    ];
+  };
   group(ctx, front(-1, -kick), O);
   group(ctx, front(1, kick), O);
 
@@ -362,9 +396,10 @@ export function drawDogFront(ctx: Ctx, t: number, eyeOpen: number, pal: Palette 
   ctx.fillStyle = pal.tag;
   ctx.fill();
 
-  // Orejas largas a los lados.
+  // Orejas largas a los lados; al caer se levantan con el aire.
   for (const side of [-1, 1]) {
-    group(ctx, [{ path: (c) => capsule(c, side * 20, 19, 5.5, side * 29, 49, 9.5), fill: pal.furDark }], O);
+    const tx = side * mix(29, 40, v.earLift), ty = mix(49, 6, v.earLift);
+    group(ctx, [{ path: (c) => capsule(c, side * 20, 19, 5.5, tx, ty, 9.5), fill: pal.furDark }], O);
   }
 
   // Hocico, nariz y boca.
@@ -385,10 +420,10 @@ export function drawDogFront(ctx: Ctx, t: number, eyeOpen: number, pal: Palette 
   ctx.quadraticCurveTo(2.2, 45.5, 5, 42.5);
   ctx.stroke();
 
-  // Ojos bien abiertos.
+  // Ojos.
   for (const side of [-1, 1]) {
     const ex = side * 9.5, ey = 26;
-    if (eyeOpen < 0.22) {
+    if (v.eyeOpen < 0.22) {
       ctx.beginPath();
       ctx.arc(ex, ey - 2.5, 4, Math.PI * 0.14, Math.PI * 0.86);
       ctx.lineWidth = 2;

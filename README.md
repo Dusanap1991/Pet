@@ -9,7 +9,7 @@ Para Windows y macOS.
 - **Vive encima de tus ventanas** sin estorbar: los clics pasan de largo salvo
   cuando el cursor está sobre el perro.
 - **Se deja acariciar**: haz clic sobre él o pásale el cursor de un lado a otro.
-- **Se deja levantar**: arrástralo hacia arriba y queda colgando del pellejo, de frente; suéltalo y cae.
+- **Se deja levantar**: arrástralo hacia arriba y queda colgando del pellejo, de frente; suéltalo y cae sentado, se sacude el susto y sale caminando.
 - **Varias pantallas**: llévalo arrastrando de una pantalla a otra, o elige la
   pantalla desde el menú de la bandeja.
 - **Come premios**: desde el ícono de la bandeja, "Dar un premio" deja caer un

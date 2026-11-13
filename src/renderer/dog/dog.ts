@@ -1,5 +1,5 @@
 import type { Fx } from '../fx';
-import { drawDog, drawDogFront, type DrawExtras } from './draw';
+import { drawDog, drawDogFront, frontHeight, type DrawExtras } from './draw';
 import { LIE, SIT, SLEEP, STAND, approachPose, clonePose, type Pose } from './pose';
 
 export type DogState =
@@ -112,6 +112,11 @@ export class Dog {
   private frontOn = false;
   /** 0 = de lado, 1 = de frente (pasa por 0,5 como un giro de papel). */
   private front = 0;
+  /** Lo soltaron estando de frente: cae y aterriza sentado mirando hacia afuera. */
+  private frontFall = false;
+  private frontSit = 0;
+  private frontScruff = 0;
+  private frontEars = 0;
 
   private awayMode = false;
   private focusMode = false;
@@ -243,6 +248,14 @@ export class Dog {
     if (this.state !== 'drag') return;
     this.vx = clamp(this.vx, -1500, 1500);
     this.vy = clamp(this.vy, -1500, 1500);
+    this.frontFall = this.frontOn;
+    if (this.frontFall) {
+      // De frente se dibuja desde los pies: el punto de apoyo pasa a estar bajo el perro colgado.
+      this.x += this.grabDX;
+      this.y = Math.min(this.y + this.grabDY + frontHeight(0) * this.scale, this.world.floorY);
+      this.grabDX = 0;
+      this.grabDY = 0;
+    }
     this.enter('fall');
   }
 
@@ -343,7 +356,13 @@ export class Dog {
     if (this.state !== 'drag') this.frontOn = false;
     else if (lift > FRONT_ON) this.frontOn = true;
     else if (lift < FRONT_OFF) this.frontOn = false;
-    this.front += ((this.frontOn ? 1 : 0) - this.front) * (1 - Math.exp(-14 * dt));
+    if (this.state !== 'fall' && this.state !== 'land') this.frontFall = false;
+    const ease = (rate: number): number => 1 - Math.exp(-rate * dt);
+    this.front += ((this.frontOn || this.frontFall ? 1 : 0) - this.front) * ease(14);
+    const held = this.state === 'drag';
+    this.frontSit += ((held || this.state === 'fall' ? 0 : 1) - this.frontSit) * ease(16);
+    this.frontScruff += ((held ? 1 : 0) - this.frontScruff) * ease(16);
+    this.frontEars += ((this.state === 'fall' ? 1 : 0) - this.frontEars) * ease(12);
     this.squashV += (-(this.squash - 1) * 320 - this.squashV * 16) * dt;
     this.squash += this.squashV * dt;
 
@@ -475,13 +494,17 @@ export class Dog {
           this.squashV = 0;
           this.vx = 0;
           this.vy = 0;
-          this.enter('land', 0.4);
+          this.enter('land', this.frontFall ? 1.3 : 0.4);
         }
         break;
       }
 
       case 'land':
-        if (this.stateT >= this.stateDur) this.enter('idle', rand(0.8, 2));
+        if (this.stateT >= this.stateDur) {
+          // Tras caer sentado de frente, se para y sale caminando.
+          if (this.frontFall) this.startWalk();
+          else this.enter('idle', rand(0.8, 2));
+        }
         break;
     }
   }
@@ -744,10 +767,22 @@ export class Dog {
     if (this.front >= 0.5) {
       // Colgando del pellejo, de frente: se balancea como un péndulo desde la mano.
       ctx.save();
-      ctx.translate(this.grabDX, this.grabDY);
+      if (this.state === 'drag') {
+        ctx.translate(this.grabDX, this.grabDY);
+      } else {
+        // Cayendo o sentado: se dibuja desde los pies y se aplasta contra el suelo al aterrizar.
+        ctx.scale(1 + (1 - this.squash) * 0.5, this.squash);
+        ctx.translate(0, -frontHeight(this.frontSit) * s);
+      }
       ctx.scale(s * Math.max(0.06, this.front * 2 - 1), s);
       ctx.rotate(this.rot);
-      drawDogFront(ctx, this.t, this.blinkT > 0 ? 0 : 1);
+      drawDogFront(ctx, {
+        t: this.t,
+        eyeOpen: this.blinkT > 0 ? 0 : 1,
+        sit: this.frontSit,
+        scruff: this.frontScruff,
+        earLift: this.frontEars,
+      });
       ctx.restore();
       return;
     }
