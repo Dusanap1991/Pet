@@ -6,6 +6,8 @@ export interface Settings {
   size: PetSize;
   breakReminders: boolean;
   breakEveryMin: number;
+  /** Pantalla donde vive el perro; sin valor, la principal. */
+  displayId?: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = { size: 'm', breakReminders: true, breakEveryMin: 50 };
@@ -22,6 +24,7 @@ export function sanitizeSettings(raw: unknown): Settings {
   if (typeof r.breakEveryMin === 'number' && r.breakEveryMin >= 5 && r.breakEveryMin <= 240) {
     out.breakEveryMin = Math.round(r.breakEveryMin);
   }
+  if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;
 }
 

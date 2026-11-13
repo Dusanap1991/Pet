@@ -31,12 +31,14 @@ export interface Pose {
   eyeHappy: number;
   mouthOpen: number;
   tongue: number;
+  /** 0..1: pliegue de piel en la nuca cuando lo levantan del pellejo. */
+  scruff: number;
 }
 
 export const POSE_KEYS = [
   'rumpX', 'rumpY', 'chestX', 'chestY', 'headX', 'headY', 'snoutAng', 'earAng',
   'tailAng', 'tailCurl', 'ffx', 'ffy', 'ffx2', 'ffy2', 'rfx', 'rfy', 'rfx2', 'rfy2',
-  'haunch', 'eyeOpen', 'eyeHappy', 'mouthOpen', 'tongue',
+  'haunch', 'eyeOpen', 'eyeHappy', 'mouthOpen', 'tongue', 'scruff',
 ] as const satisfies readonly (keyof Pose)[];
 
 export const STAND: Pose = {
@@ -46,7 +48,7 @@ export const STAND: Pose = {
   tailAng: -2.55, tailCurl: 0.32,
   ffx: 31, ffy: -4.5, ffx2: 22, ffy2: -4.5,
   rfx: -44, rfy: -4.5, rfx2: -53, rfy2: -4.5,
-  haunch: 0, eyeOpen: 1, eyeHappy: 0, mouthOpen: 0, tongue: 0,
+  haunch: 0, eyeOpen: 1, eyeHappy: 0, mouthOpen: 0, tongue: 0, scruff: 0,
 };
 
 export const SIT: Pose = {

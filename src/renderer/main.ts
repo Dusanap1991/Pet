@@ -16,7 +16,7 @@ declare global {
 
 // Caja del lienzo en unidades del perro; el origen es su punto de apoyo en el suelo.
 const BOX_W = 330;
-const BOX_H = 245;
+const BOX_H = 300;
 const ORIGIN_X = 160;
 const ORIGIN_Y = 210;
 
@@ -129,6 +129,7 @@ window.addEventListener('pointermove', (e) => {
   if (pressing && !dragging && Math.hypot(e.clientX - pressX, e.clientY - pressY) > 6) {
     dragging = true;
     dog.grab(pressX, pressY);
+    bridge?.setDragging(true);
   }
 });
 
@@ -145,8 +146,12 @@ window.addEventListener('pointerdown', (e) => {
 
 function endPress(): void {
   if (!pressing) return;
-  if (dragging) dog.release();
-  else dog.pet();
+  if (dragging) {
+    dog.release();
+    bridge?.setDragging(false);
+  } else {
+    dog.pet();
+  }
   pressing = false;
   dragging = false;
 }

@@ -9,6 +9,7 @@ import {
   Tray,
   type IpcMainEvent,
   type MenuItemConstructorOptions,
+  type Display,
   type Rectangle,
 } from 'electron';
 import * as path from 'node:path';
@@ -34,6 +35,7 @@ let bounds: Rectangle = { x: 0, y: 0, width: 0, height: 0 };
 let lastCursorX = NaN;
 let lastCursorY = NaN;
 let lastFocusMin = -1;
+let dragging = false;
 let cursorTimer: NodeJS.Timeout | undefined;
 let activityTimer: NodeJS.Timeout | undefined;
 
@@ -55,8 +57,26 @@ function isFromPet(event: IpcMainEvent): boolean {
  * principal. Deja pasar todos los clics salvo cuando el cursor está sobre el
  * perro (lo decide la ventana y avisa con `pet:set-interactive`).
  */
+/** La pantalla donde vive el perro; si ya no está conectada, la principal. */
+function currentDisplay(): Display {
+  const saved = screen.getAllDisplays().find((d) => d.id === settings.displayId);
+  return saved ?? screen.getPrimaryDisplay();
+}
+
+function moveToDisplay(display: Display): void {
+  if (!win || win.isDestroyed()) return;
+  settings = { ...settings, displayId: display.id };
+  saveSettings(settingsFile, settings);
+  bounds = display.workArea;
+  // Dos veces: entre pantallas con distinta escala la primera puede quedar con el tamaño equivocado.
+  win.setBounds(bounds);
+  win.setBounds(bounds);
+  lastCursorX = NaN;
+  refreshTray();
+}
+
 function createWindow(): void {
-  bounds = screen.getPrimaryDisplay().workArea;
+  bounds = currentDisplay().workArea;
   rendererReady = false;
 
   win = new BrowserWindow({
@@ -105,8 +125,9 @@ function createWindow(): void {
 
 function fitToDisplay(): void {
   if (!win || win.isDestroyed()) return;
-  bounds = screen.getPrimaryDisplay().workArea;
+  bounds = currentDisplay().workArea;
   win.setBounds(bounds);
+  refreshTray();
 }
 
 function showPet(): void {
@@ -151,6 +172,23 @@ function cancelFocus(): void {
   refreshTray();
 }
 
+/** Con más de una pantalla, permite elegir en cuál vive (también se lo puede arrastrar de una a otra). */
+function displayMenu(): MenuItemConstructorOptions[] {
+  const displays = screen.getAllDisplays();
+  if (displays.length < 2) return [];
+  const current = currentDisplay().id;
+  const primary = screen.getPrimaryDisplay().id;
+  return [{
+    label: 'Pantalla',
+    submenu: displays.map((d, i) => ({
+      label: `Pantalla ${i + 1}${d.id === primary ? ' (principal)' : ''}, ${d.size.width}×${d.size.height}`,
+      type: 'radio' as const,
+      checked: d.id === current,
+      click: () => moveToDisplay(d),
+    })),
+  }];
+}
+
 function buildMenu(): Menu {
   const shown = win !== null && !win.isDestroyed() && win.isVisible();
   const template: MenuItemConstructorOptions[] = [
@@ -189,6 +227,7 @@ function buildMenu(): Menu {
         click: () => updateSettings({ size: id }),
       })),
     },
+    ...displayMenu(),
     {
       label: 'Abrir al iniciar sesión',
       type: 'checkbox',
@@ -220,6 +259,11 @@ function createTray(): void {
 function pollCursor(): void {
   if (!win || win.isDestroyed() || !rendererReady || !win.isVisible()) return;
   const point = screen.getCursorScreenPoint();
+  if (dragging) {
+    // Lo llevan agarrado hacia otra pantalla: la ventana se muda con él.
+    const under = screen.getDisplayNearestPoint(point);
+    if (under.id !== currentDisplay().id) moveToDisplay(under);
+  }
   const x = point.x - bounds.x;
   const y = point.y - bounds.y;
   if (x === lastCursorX && y === lastCursorY) return;
@@ -280,6 +324,11 @@ function start(): void {
   ipcMain.on('pet:set-interactive', (event, on: unknown) => {
     if (!isFromPet(event)) return;
     win?.setIgnoreMouseEvents(on !== true);
+  });
+
+  ipcMain.on('pet:dragging', (event, on: unknown) => {
+    if (!isFromPet(event)) return;
+    dragging = on === true;
   });
 
   createWindow();

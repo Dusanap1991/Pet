@@ -180,6 +180,11 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
     const hr = 8 + 6.5 * p.haunch;
     main.push({ path: (c) => capsule(c, p.rumpX + 6, p.rumpY + 2, hr, p.rumpX + 6, p.rumpY + 2, hr), fill: pal.fur });
   }
+  if (p.scruff > 0.02) {
+    // Pellejo de la nuca estirado hacia la mano que lo sostiene.
+    const bx = p.chestX - 12, by = p.chestY - 11;
+    main.push({ path: (c) => capsule(c, bx, by, 9, bx + 3 * p.scruff, by - 12 * p.scruff, 3.6), fill: pal.fur });
+  }
   main.push(
     ...leg(p.rumpX + 2, p.rumpY + 9, p.rfx, p.rfy, pal.fur),
     ...leg(p.chestX - 2, p.chestY + 9, p.ffx, p.ffy, pal.fur),

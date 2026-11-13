@@ -8,6 +8,9 @@ const bridge: PetBridge = {
   setInteractive(on) {
     ipcRenderer.send('pet:set-interactive', on === true);
   },
+  setDragging(on) {
+    ipcRenderer.send('pet:dragging', on === true);
+  },
   ready() {
     ipcRenderer.send('pet:ready');
   },

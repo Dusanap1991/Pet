@@ -33,6 +33,11 @@ const TAU = Math.PI * 2;
 const GRAVITY = 2300;
 /** Distancia (en unidades del perro) entre su centro y la punta del hocico con la cabeza abajo. */
 const MOUTH_REACH = 86;
+/** Punto de la nuca del que cuelga al levantarlo, en unidades del perro. */
+const SCRUFF_X = 25;
+const SCRUFF_Y = -58;
+/** Inclinación máxima (radianes) cuando cuelga del pellejo. */
+const HANG_MAX = 1.0;
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v));
@@ -98,6 +103,8 @@ export class Dog {
   private squashV = 0;
   private grabDX = 0;
   private grabDY = 0;
+  /** 0..1: cuánto cuelga del pellejo (crece al separarlo del suelo). */
+  private hang = 0;
 
   private awayMode = false;
   private focusMode = false;
@@ -209,6 +216,10 @@ export class Dog {
 
   dragTo(cx: number, cy: number, dt: number): void {
     if (this.state !== 'drag') return;
+    // El agarre se desliza hasta la nuca: siempre termina colgando del pellejo.
+    const slide = 1 - Math.exp(-14 * dt);
+    this.grabDX += (SCRUFF_X * this.scale * this.facing - this.grabDX) * slide;
+    this.grabDY += (SCRUFF_Y * this.scale - this.grabDY) * slide;
     const edge = this.bounds()[0] * 0.4;
     const nx = clamp(cx - this.grabDX, edge, this.world.width - edge);
     const ny = Math.min(cy - this.grabDY, this.world.floorY);
@@ -319,6 +330,8 @@ export class Dog {
     this.rotTarget = this.state === 'drag' ? clamp(-this.vx * 0.0011, -0.55, 0.55) : 0;
     this.rotV += ((this.rotTarget - this.rot) * 90 - this.rotV * 11) * dt;
     this.rot += this.rotV * dt;
+    const hangTarget = this.state === 'drag' ? clamp((world.floorY - this.y) / (70 * this.scale), 0, 1) : 0;
+    this.hang += (hangTarget - this.hang) * (1 - Math.exp(-(this.state === 'drag' ? 9 : 16) * dt));
     this.squashV += (-(this.squash - 1) * 320 - this.squashV * 16) * dt;
     this.squash += this.squashV * dt;
 
@@ -607,19 +620,27 @@ export class Dog {
         break;
       }
       case 'drag': {
-        const k = Math.sin(this.t * 14) * 4;
-        tp.ffx += 3 + k;
-        tp.ffx2 += 3 - k;
-        tp.rfx -= 2 + k;
-        tp.rfx2 -= 2 - k;
-        tp.ffy = 2;
-        tp.ffy2 = 2;
-        tp.rfy = 3;
-        tp.rfy2 = 3;
-        tp.tailAng = -3.7;
-        tp.tailCurl = -0.1;
-        tp.earAng = 0.4;
+        // Cuelga del pellejo: patas, orejas y cola caen hacia el suelo aunque el cuerpo esté inclinado.
+        const a = this.hang * HANG_MAX;
+        const dx = -Math.sin(a), dy = Math.cos(a);
+        const len = 21;
+        const k = Math.sin(this.t * 9) * 3 * this.hang;
+        tp.ffx = tp.chestX - 2 + dx * len + k;
+        tp.ffy = tp.chestY + 9 + dy * len;
+        tp.ffx2 = tp.chestX - 10 + dx * len - k;
+        tp.ffy2 = tp.chestY + 8 + dy * len;
+        tp.rfx = tp.rumpX + 2 + dx * len - k;
+        tp.rfy = tp.rumpY + 9 + dy * len;
+        tp.rfx2 = tp.rumpX - 7 + dx * len + k;
+        tp.rfy2 = tp.rumpY + 8 + dy * len;
+        tp.tailAng = -Math.PI * 1.5 + a + 0.3;
+        tp.tailCurl = 0.22;
+        tp.earAng = 0.1 + a * 0.9;
+        tp.headY += 3;
+        // La cabeza no acompaña del todo la inclinación: queda mirando al frente.
+        tp.snoutAng += a * 0.7;
         tp.eyeOpen = 1.3;
+        tp.scruff = 1;
         break;
       }
       case 'fall':
@@ -712,11 +733,12 @@ export class Dog {
     ctx.scale(1 + (1 - this.squash) * 0.5, this.squash);
     const fv = Math.abs(this.faceVis) < 0.06 ? 0.06 * (this.faceVis < 0 ? -1 : 1) : this.faceVis;
     ctx.scale(s * fv, s);
-    if (Math.abs(this.rot) > 0.001) {
+    if (Math.abs(this.rot) > 0.001 || this.hang > 0.001) {
       const px = this.grabDX / (s * this.facing);
       const py = this.grabDY / s;
       ctx.translate(px, py);
-      ctx.rotate(this.rot * this.facing);
+      // Cabeza arriba y cola abajo al colgar, más el balanceo por el movimiento.
+      ctx.rotate(this.rot * this.facing - this.hang * HANG_MAX);
       ctx.translate(-px, -py);
     }
     drawDog(ctx, this.render, extras);

@@ -18,6 +18,8 @@ export interface PetBridge {
   onEvent(cb: (e: PetEvent) => void): void;
   /** true = la ventana recibe clics (el cursor está sobre el perro). */
   setInteractive(on: boolean): void;
+  /** Avisa que lo están arrastrando, para poder llevarlo a otra pantalla. */
+  setDragging(on: boolean): void;
   ready(): void;
 }
 
