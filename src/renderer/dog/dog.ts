@@ -1,5 +1,5 @@
 import type { Fx } from '../fx';
-import { drawDog, type DrawExtras } from './draw';
+import { drawDog, drawDogFront, type DrawExtras } from './draw';
 import { LIE, SIT, SLEEP, STAND, approachPose, clonePose, type Pose } from './pose';
 
 export type DogState =
@@ -37,7 +37,10 @@ const MOUTH_REACH = 86;
 const SCRUFF_X = 25;
 const SCRUFF_Y = -58;
 /** Inclinación máxima (radianes) cuando cuelga del pellejo. */
-const HANG_MAX = 1.0;
+const HANG_MAX = 0.4;
+/** Altura (en unidades del perro) a la que gira para quedar colgando de frente, y a la que vuelve de lado. */
+const FRONT_ON = 92;
+const FRONT_OFF = 68;
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v));
@@ -105,6 +108,10 @@ export class Dog {
   private grabDY = 0;
   /** 0..1: cuánto cuelga del pellejo (crece al separarlo del suelo). */
   private hang = 0;
+  /** true cuando está lo bastante alto como para verse de frente. */
+  private frontOn = false;
+  /** 0 = de lado, 1 = de frente (pasa por 0,5 como un giro de papel). */
+  private front = 0;
 
   private awayMode = false;
   private focusMode = false;
@@ -332,6 +339,11 @@ export class Dog {
     this.rot += this.rotV * dt;
     const hangTarget = this.state === 'drag' ? clamp((world.floorY - this.y) / (70 * this.scale), 0, 1) : 0;
     this.hang += (hangTarget - this.hang) * (1 - Math.exp(-(this.state === 'drag' ? 9 : 16) * dt));
+    const lift = (world.floorY - this.y) / this.scale;
+    if (this.state !== 'drag') this.frontOn = false;
+    else if (lift > FRONT_ON) this.frontOn = true;
+    else if (lift < FRONT_OFF) this.frontOn = false;
+    this.front += ((this.frontOn ? 1 : 0) - this.front) * (1 - Math.exp(-14 * dt));
     this.squashV += (-(this.squash - 1) * 320 - this.squashV * 16) * dt;
     this.squash += this.squashV * dt;
 
@@ -729,10 +741,28 @@ export class Dog {
       wagLag: this.wagAmp * Math.sin(this.wagPhase - 0.9),
     };
 
+    if (this.front >= 0.5) {
+      // Colgando del pellejo, de frente: se balancea como un péndulo desde la mano.
+      ctx.save();
+      ctx.translate(this.grabDX, this.grabDY);
+      ctx.scale(s * Math.max(0.06, this.front * 2 - 1), s);
+      ctx.rotate(this.rot);
+      drawDogFront(ctx, this.t, this.blinkT > 0 ? 0 : 1);
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     ctx.scale(1 + (1 - this.squash) * 0.5, this.squash);
     const fv = Math.abs(this.faceVis) < 0.06 ? 0.06 * (this.faceVis < 0 ? -1 : 1) : this.faceVis;
     ctx.scale(s * fv, s);
+    if (this.front > 0.001) {
+      // Giro de papel alrededor de la nuca al pasar de lado a de frente.
+      const pivotX = this.grabDX / (s * this.facing);
+      ctx.translate(pivotX, 0);
+      ctx.scale(Math.max(0.06, 1 - this.front * 2), 1);
+      ctx.translate(-pivotX, 0);
+    }
     if (Math.abs(this.rot) > 0.001 || this.hang > 0.001) {
       const px = this.grabDX / (s * this.facing);
       const py = this.grabDY / s;

@@ -297,3 +297,112 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
     ctx.stroke();
   }
 }
+
+/**
+ * El perro visto de frente, colgando del pellejo. El origen es el punto de la
+ * nuca del que lo sostienen; el cuerpo cuelga hacia abajo (+y).
+ * `t` es el tiempo en segundos (mueve patas y cola) y `eyeOpen` permite parpadear.
+ */
+export function drawDogFront(ctx: Ctx, t: number, eyeOpen: number, pal: Palette = DACHSHUND): void {
+  const O = pal.outline;
+  ctx.lineCap = 'round';
+  const kick = Math.sin(t * 7) * 2.5;
+  const tailX = Math.sin(t * 5) * 9;
+
+  // Cola, detrás de todo.
+  group(ctx, [{ path: (c) => capsule(c, 0, 122, 4.2, tailX, 146, 2) , fill: pal.fur }], O);
+
+  // Patas traseras colgando.
+  const hind = (side: number, k: number): Part[] => [
+    { path: (c) => capsule(c, side * 10, 112, 7.5, side * 13 + k, 134, 5.6), fill: pal.furDark },
+    { path: (c) => capsule(c, side * 13 + k, 136, 6, side * 13 + k, 137, 6), fill: pal.furDark },
+  ];
+  group(ctx, [...hind(-1, kick), ...hind(1, -kick)], O);
+
+  // Pellejo, cuerpo y cabeza como una sola silueta.
+  group(
+    ctx,
+    [
+      { path: (c) => capsule(c, 0, 2, 3.8, 0, 14, 9), fill: pal.fur },
+      { path: (c) => capsule(c, 0, 62, 16.5, 0, 114, 17.5), fill: pal.fur },
+      { path: (c) => capsule(c, 0, 31, 22.5, 0, 31, 22.5), fill: pal.fur },
+    ],
+    O,
+  );
+
+  // Panza más clara.
+  ctx.beginPath();
+  capsule(ctx, 0, 74, 8.5, 0, 112, 10.5);
+  ctx.fillStyle = pal.furLight;
+  ctx.fill();
+
+  // Patas delanteras, flojas sobre el pecho.
+  const front = (side: number, k: number): Part[] => [
+    { path: (c) => capsule(c, side * 13, 66, 6.5, side * 15 + k, 88, 5.4), fill: pal.fur },
+    { path: (c) => capsule(c, side * 15 + k, 90, 5.8, side * 15 + k, 91, 5.8), fill: pal.fur },
+  ];
+  group(ctx, front(-1, -kick), O);
+  group(ctx, front(1, kick), O);
+
+  // Collar con chapita.
+  ctx.beginPath();
+  ctx.moveTo(-14, 53);
+  ctx.quadraticCurveTo(0, 58, 14, 53);
+  ctx.lineWidth = 5.4 + OUTLINE_W * 1.6;
+  ctx.strokeStyle = O;
+  ctx.stroke();
+  ctx.lineWidth = 5.4;
+  ctx.strokeStyle = pal.collar;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 60.5, 3.4, 0, TAU);
+  ctx.lineWidth = OUTLINE_W * 1.5;
+  ctx.strokeStyle = O;
+  ctx.stroke();
+  ctx.fillStyle = pal.tag;
+  ctx.fill();
+
+  // Orejas largas a los lados.
+  for (const side of [-1, 1]) {
+    group(ctx, [{ path: (c) => capsule(c, side * 20, 19, 5.5, side * 29, 49, 9.5), fill: pal.furDark }], O);
+  }
+
+  // Hocico, nariz y boca.
+  ctx.beginPath();
+  ctx.ellipse(0, 39, 12, 9, 0, 0, TAU);
+  ctx.fillStyle = pal.furLight;
+  ctx.fill();
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = O;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(0, 35, 5.4, 4, 0, 0, TAU);
+  ctx.fillStyle = pal.nose;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-5, 42.5);
+  ctx.quadraticCurveTo(-2.2, 45.5, 0, 42);
+  ctx.quadraticCurveTo(2.2, 45.5, 5, 42.5);
+  ctx.stroke();
+
+  // Ojos bien abiertos.
+  for (const side of [-1, 1]) {
+    const ex = side * 9.5, ey = 26;
+    if (eyeOpen < 0.22) {
+      ctx.beginPath();
+      ctx.arc(ex, ey - 2.5, 4, Math.PI * 0.14, Math.PI * 0.86);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = pal.eye;
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, 3.6, 4.2, 0, 0, TAU);
+      ctx.fillStyle = pal.eye;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ex + 1.1, ey - 1.5, 1.3, 0, TAU);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+    }
+  }
+}
