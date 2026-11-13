@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nuevo recordatorio</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <form id="form" autocomplete="off">
+      <label class="field">
+        <span>¿Qué te recuerdo?</span>
+        <input id="text" type="text" maxlength="120" placeholder="Llamar a Ana" required autofocus />
+      </label>
+
+      <fieldset>
+        <legend>¿Cuándo?</legend>
+        <label class="row">
+          <input type="radio" name="mode" value="in" checked />
+          <span>En</span>
+          <input id="minutes" type="number" min="1" max="1440" value="20" />
+          <span>minutos</span>
+        </label>
+        <label class="row">
+          <input type="radio" name="mode" value="at" />
+          <span>A las</span>
+          <input id="time" type="time" />
+        </label>
+        <label class="row sub">
+          <input id="daily" type="checkbox" />
+          <span>Repetir todos los días a esa hora</span>
+        </label>
+      </fieldset>
+
+      <p id="error" role="alert"></p>
+
+      <div class="actions">
+        <button type="button" id="cancel">Cancelar</button>
+        <button type="submit" class="primary">Guardar</button>
+      </div>
+    </form>
+    <script src="reminder.js"></script>
+  </body>
+</html>

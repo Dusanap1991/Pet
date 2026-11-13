@@ -12,6 +12,7 @@ export type PetEvent =
   | { type: 'focus-end'; completed: boolean; minutes: number }
   | { type: 'treat' }
   | { type: 'water' }
+  | { type: 'reminder'; text: string }
   | { type: 'notice'; text: string }
   | { type: 'settings'; size: PetSize };
 
@@ -22,6 +23,8 @@ export interface PetBridge {
   setInteractive(on: boolean): void;
   /** Avisa que lo están arrastrando, para poder llevarlo a otra pantalla. */
   setDragging(on: boolean): void;
+  /** Clic derecho sobre el perro: abre su menú. */
+  showMenu(): void;
   ready(): void;
 }
 

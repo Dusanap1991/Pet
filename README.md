@@ -19,11 +19,16 @@ Para Windows y macOS.
 - **Te cuida**: avisa cuando llevas mucho rato sin parar (50 minutos por defecto).
 - **Te recuerda tomar agua**: desde que abre, cada 45 minutos (se puede cambiar o
   apagar). Si no estás o estás en foco, espera a que vuelvas.
+- **Recordatorios y temporizadores**: "en 20 minutos" o "a las 16:00", una vez o
+  todos los días. El perro ladra y deja el mensaje hasta que le haces clic. Se
+  guardan aunque cierres la app.
+- **Se esconde cuando estorba**: lo ocultas por 30 minutos, 1 o 2 horas y vuelve
+  solo. En macOS se esconde además cuando hay una app en pantalla completa.
 - **Sesiones de foco**: elige 15, 25 o 45 minutos; se queda echado y tranquilo, y
   ladra cuando se cumple el tiempo.
 
-Todo se controla desde el ícono del perro en la bandeja del sistema (Windows) o
-en la barra de menú (macOS): mostrar u ocultar, premios, foco, avisos, tamaño y
+Todo se controla con clic derecho sobre el perro, o desde su ícono en la bandeja
+del sistema (Windows) o en la barra de menú (macOS): mostrar u ocultar, premios, foco, avisos, tamaño y
 abrir al iniciar sesión.
 
 ## Privacidad
@@ -31,7 +36,9 @@ abrir al iniciar sesión.
 La única señal que lee del sistema es **cuántos segundos llevas sin tocar teclado
 o mouse** (para saber si te fuiste) y la posición del cursor (para saber si está
 sobre el perro). No registra teclas, no pide permisos de accesibilidad ni de
-grabación de pantalla. Solo se conecta a internet para consultar en GitHub si hay
+grabación de pantalla. En macOS, para saber si hay algo en pantalla completa, mira
+la posición y el tamaño de las ventanas abiertas, nunca su contenido ni su título.
+Solo se conecta a internet para consultar en GitHub si hay
 una versión nueva.
 
 ## Instalar

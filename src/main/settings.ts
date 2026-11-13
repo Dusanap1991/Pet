@@ -8,6 +8,8 @@ export interface Settings {
   breakEveryMin: number;
   waterReminders: boolean;
   waterEveryMin: number;
+  /** macOS: esconderse solo cuando hay una app en pantalla completa. */
+  hideOnFullscreen: boolean;
   /** Pantalla donde vive el perro; sin valor, la principal. */
   displayId?: number;
 }
@@ -18,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   breakEveryMin: 50,
   waterReminders: true,
   waterEveryMin: 45,
+  hideOnFullscreen: true,
 };
 
 export const BREAK_CHOICES = [30, 50, 90] as const;
@@ -37,6 +40,7 @@ export function sanitizeSettings(raw: unknown): Settings {
   if (typeof r.waterEveryMin === 'number' && r.waterEveryMin >= 5 && r.waterEveryMin <= 240) {
     out.waterEveryMin = Math.round(r.waterEveryMin);
   }
+  if (typeof r.hideOnFullscreen === 'boolean') out.hideOnFullscreen = r.hideOnFullscreen;
   if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;
 }

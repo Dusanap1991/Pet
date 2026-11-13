@@ -9,6 +9,7 @@ const common = { bundle: true, sourcemap: dev, logLevel: 'warning', legalComment
 
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist/renderer', { recursive: true });
+await mkdir('dist/reminder', { recursive: true });
 
 await Promise.all([
   build({
@@ -47,6 +48,26 @@ await Promise.all([
     format: 'iife',
     minify: !dev,
   }),
+  build({
+    ...common,
+    entryPoints: ['src/preload/reminder.ts'],
+    outfile: 'dist/preload/reminder.js',
+    platform: 'node',
+    target: 'node22',
+    format: 'cjs',
+    external: ['electron'],
+  }),
+  build({
+    ...common,
+    entryPoints: ['src/reminder/main.ts'],
+    outfile: 'dist/reminder/reminder.js',
+    platform: 'browser',
+    target: 'chrome130',
+    format: 'iife',
+    minify: !dev,
+  }),
+  cp('src/reminder/index.html', 'dist/reminder/index.html'),
+  cp('src/reminder/style.css', 'dist/reminder/style.css'),
   cp('src/renderer/index.html', 'dist/renderer/index.html'),
   cp('src/renderer/style.css', 'dist/renderer/style.css'),
   cp('assets', 'dist/assets', { recursive: true }),

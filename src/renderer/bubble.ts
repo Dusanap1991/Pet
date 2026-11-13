@@ -21,6 +21,10 @@ export class Bubble {
     this.h = this.el.offsetHeight;
   }
 
+  dismiss(): void {
+    this.hideAt = 0;
+  }
+
   /** `headX`/`headTop` en píxeles de la ventana. */
   update(now: number, headX: number, headTop: number, viewportW: number): void {
     if (!this.shown) return;

@@ -18,6 +18,8 @@ import * as path from 'node:path';
 import type { PetEvent, PetSize } from '../shared/types';
 import { ActivityTracker } from './activity';
 import { FocusSession } from './focus';
+import { isFullscreen, watchWindows, type WindowRect } from './fullscreen';
+import { ReminderStore, parseRequest } from './reminders';
 import { checkForUpdate } from './updater';
 import { WaterReminder } from './water';
 import { BREAK_CHOICES, WATER_CHOICES, loadSettings, saveSettings, type Settings } from './settings';
@@ -28,6 +30,8 @@ const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
 
 const FOCUS_CHOICES = [15, 25, 45];
+const TIMER_CHOICES = [5, 10, 15, 20, 30, 45, 60];
+const HIDE_CHOICES: [number, string][] = [[30, '30 minutos'], [60, '1 hora'], [120, '2 horas']];
 const SIZES: [PetSize, string][] = [['s', 'Chico'], ['m', 'Mediano'], ['l', 'Grande']];
 /** Cada cuánto se mira dónde está el cursor para saber si está sobre el perro. */
 const CURSOR_POLL_MS = 33;
@@ -52,6 +56,18 @@ let activityTimer: NodeJS.Timeout | undefined;
 const tracker = new ActivityTracker();
 const focus = new FocusSession();
 let water: WaterReminder;
+let reminders: ReminderStore;
+let reminderWin: BrowserWindow | null = null;
+
+/** Lo escondiste tú desde el menú; `hideUntil` es cuándo vuelve solo (null = hasta que lo llames). */
+let userHidden = false;
+let hideUntil: number | null = null;
+/** Hay una app en pantalla completa sobre la pantalla del perro (solo se detecta en macOS). */
+let fullscreenNow = false;
+let fullscreenClear: NodeJS.Timeout | undefined;
+let lastWindows: WindowRect[] = [];
+/** Avisos que llegaron mientras estaba escondido por pantalla completa; se entregan al volver. */
+let held: PetEvent[] = [];
 
 // ------------------------------------------------------------- ventana
 
@@ -83,6 +99,7 @@ function moveToDisplay(display: Display): void {
   win.setBounds(bounds);
   win.setBounds(bounds);
   lastCursorX = NaN;
+  updateFullscreen();
   refreshTray();
 }
 
@@ -126,7 +143,7 @@ function createWindow(): void {
   win.webContents.on('will-navigate', (event) => event.preventDefault());
 
   win.once('ready-to-show', () => {
-    win?.showInactive();
+    applyVisibility();
     // El perro llegó a mostrarse: la actualización en uso queda confirmada como sana.
     fs.rmSync(path.join(updateRoot(), 'pending'), { force: true });
   });
@@ -145,17 +162,149 @@ function fitToDisplay(): void {
   refreshTray();
 }
 
-function showPet(): void {
-  if (!win || win.isDestroyed()) return;
-  win.showInactive();
-  win.setAlwaysOnTop(true, 'screen-saver');
+function hiddenByFullscreen(): boolean {
+  return settings.hideOnFullscreen && fullscreenNow;
 }
 
-function toggleVisible(): void {
+/** Muestra u oculta la ventana según lo que pediste y si hay algo en pantalla completa. */
+function applyVisibility(): void {
   if (!win || win.isDestroyed()) return;
-  if (win.isVisible()) win.hide();
-  else showPet();
+  const want = !userHidden && !hiddenByFullscreen();
+  if (want && !win.isVisible()) {
+    win.showInactive();
+    win.setAlwaysOnTop(true, 'screen-saver');
+  } else if (!want && win.isVisible()) {
+    win.hide();
+  }
+  if (want && held.length > 0) {
+    const pending = held;
+    held = [];
+    setTimeout(() => pending.forEach(send), 800);
+  }
   refreshTray();
+}
+
+function showPet(): void {
+  userHidden = false;
+  hideUntil = null;
+  applyVisibility();
+}
+
+/** `minutes` null = hasta que lo llames. */
+function hidePet(minutes: number | null): void {
+  userHidden = true;
+  hideUntil = minutes === null ? null : Date.now() + minutes * 60_000;
+  applyVisibility();
+}
+
+/** Un aviso que pediste: el perro aparece para darlo, salvo que haya algo en pantalla completa (espera a que termine). */
+function notify(event: PetEvent): void {
+  if (hiddenByFullscreen()) {
+    if (held.length < 10) held.push(event);
+    return;
+  }
+  showPet();
+  send(event);
+}
+
+function updateFullscreen(): void {
+  const display = currentDisplay();
+  const now = isFullscreen(lastWindows, display.bounds, display.workArea);
+  if (now) {
+    clearTimeout(fullscreenClear);
+    fullscreenClear = undefined;
+    if (!fullscreenNow) {
+      fullscreenNow = true;
+      applyVisibility();
+    }
+  } else if (fullscreenNow && !fullscreenClear) {
+    // Espera un poco antes de volver: en pantalla completa la barra de menú aparece un instante al acercar el cursor.
+    fullscreenClear = setTimeout(() => {
+      fullscreenClear = undefined;
+      fullscreenNow = false;
+      applyVisibility();
+    }, 3000);
+  }
+}
+
+// -------------------------------------------------------- recordatorios
+
+function openReminderForm(): void {
+  if (reminderWin && !reminderWin.isDestroyed()) {
+    reminderWin.show();
+    reminderWin.focus();
+    return;
+  }
+  reminderWin = new BrowserWindow({
+    width: 400,
+    height: 340,
+    useContentSize: true,
+    title: 'Nuevo recordatorio',
+    show: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/reminder.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      devTools: !app.isPackaged,
+    },
+  });
+  reminderWin.setMenuBarVisibility(false);
+  reminderWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  reminderWin.webContents.on('will-navigate', (event) => event.preventDefault());
+  reminderWin.once('ready-to-show', () => {
+    reminderWin?.show();
+    if (isMac) app.focus({ steal: true });
+    reminderWin?.focus();
+  });
+  reminderWin.on('closed', () => {
+    reminderWin = null;
+  });
+  void reminderWin.loadFile(path.join(__dirname, '../reminder/index.html'));
+}
+
+function isFromReminderForm(event: IpcMainEvent): boolean {
+  return reminderWin !== null && !reminderWin.isDestroyed() && event.sender === reminderWin.webContents;
+}
+
+function startTimer(minutes: number): void {
+  reminders.add({ text: `¡Pasaron ${minutes} min!`, at: Date.now() + minutes * 60_000 });
+  send({ type: 'notice', text: `Listo, te aviso en ${minutes} min.` });
+  refreshTray();
+}
+
+function clock(at: number): string {
+  const d = new Date(at);
+  const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return d.toDateString() === new Date().toDateString() ? hhmm : `mañana ${hhmm}`;
+}
+
+function remindersMenu(): MenuItemConstructorOptions {
+  const pending = reminders.list;
+  const submenu: MenuItemConstructorOptions[] = [
+    { label: 'Nuevo recordatorio…', click: openReminderForm },
+    { label: 'Temporizador', submenu: TIMER_CHOICES.map((m) => ({ label: `${m} minutos`, click: () => startTimer(m) })) },
+  ];
+  if (pending.length > 0) {
+    submenu.push({ type: 'separator' }, { label: 'Pendientes (clic para borrar)', enabled: false });
+    for (const r of pending) {
+      const text = r.text.length > 40 ? `${r.text.slice(0, 39)}…` : r.text;
+      submenu.push({
+        label: `${clock(r.at)} · ${text}${r.daily ? ' (diario)' : ''}`,
+        click: () => {
+          reminders.remove(r.id);
+          refreshTray();
+        },
+      });
+    }
+  }
+  return { label: pending.length > 0 ? `Recordatorios (${pending.length})` : 'Recordatorios', submenu };
 }
 
 // ------------------------------------------------------ actualizaciones
@@ -245,12 +394,29 @@ function displayMenu(): MenuItemConstructorOptions[] {
   }];
 }
 
+function visibilityMenu(): MenuItemConstructorOptions[] {
+  if (userHidden) {
+    const left = hideUntil === null ? '' : ` (vuelve en ${Math.max(1, Math.ceil((hideUntil - Date.now()) / 60_000))} min)`;
+    return [{ label: `Mostrar al perro${left}`, click: showPet }];
+  }
+  const items: MenuItemConstructorOptions[] = [{
+    label: 'Ocultar al perro',
+    submenu: [
+      { label: 'Hasta que lo llame', click: () => hidePet(null) },
+      ...HIDE_CHOICES.map(([m, label]) => ({ label: `Por ${label}`, click: () => hidePet(m) })),
+    ],
+  }];
+  if (hiddenByFullscreen()) items.push({ label: 'Escondido: hay algo en pantalla completa', enabled: false });
+  return items;
+}
+
 function buildMenu(): Menu {
   const shown = win !== null && !win.isDestroyed() && win.isVisible();
   const template: MenuItemConstructorOptions[] = [
-    { label: shown ? 'Ocultar al perro' : 'Mostrar al perro', click: toggleVisible },
+    ...visibilityMenu(),
     { type: 'separator' },
     { label: 'Dar un premio', enabled: shown, click: () => send({ type: 'treat' }) },
+    remindersMenu(),
     focus.active
       ? { label: `Cancelar foco (quedan ${focus.remainingMin(Date.now())} min)`, click: cancelFocus }
       : {
@@ -300,6 +466,17 @@ function buildMenu(): Menu {
       })),
     },
     ...displayMenu(),
+    ...(isMac
+      ? [{
+          label: 'Esconderse con pantalla completa',
+          type: 'checkbox' as const,
+          checked: settings.hideOnFullscreen,
+          click: (item: Electron.MenuItem) => {
+            updateSettings({ hideOnFullscreen: item.checked });
+            applyVisibility();
+          },
+        }]
+      : []),
     {
       label: 'Abrir al iniciar sesión',
       type: 'checkbox',
@@ -368,14 +545,25 @@ function tickActivity(): void {
   if (focus.tick(now)) {
     water.postpone(now, 60_000);
     // Si estaba oculto, aparece: pediste que te avisara.
-    showPet();
-    send({ type: 'focus-end', completed: true, minutes: focus.minutes });
+    notify({ type: 'focus-end', completed: true, minutes: focus.minutes });
     tracker.snooze(now);
     refreshTray();
   } else if (focus.active) {
     const left = focus.remainingMin(now);
     if (left !== lastFocusMin) {
       lastFocusMin = left;
+      refreshTray();
+    }
+  }
+
+  if (hideUntil !== null && now >= hideUntil) showPet();
+
+  // Los recordatorios esperan a que vuelvas si no hay nadie frente al equipo.
+  if (!tracker.isAway) {
+    const due = reminders.takeDue(now);
+    if (due.length > 0) {
+      water.postpone(now, 90_000);
+      notify({ type: 'reminder', text: due.map((r) => r.text).join('\n') });
       refreshTray();
     }
   }
@@ -397,6 +585,7 @@ function start(): void {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   settings = loadSettings(settingsFile);
   water = new WaterReminder(Date.now(), settings.waterEveryMin);
+  reminders = new ReminderStore(path.join(app.getPath('userData'), 'reminders.json'));
 
   if (isWin) app.setAppUserModelId('com.dusanap1991.pet');
   if (isMac) app.dock?.hide();
@@ -419,8 +608,33 @@ function start(): void {
     dragging = on === true;
   });
 
+  ipcMain.on('pet:menu', (event) => {
+    if (!isFromPet(event) || !win) return;
+    buildMenu().popup({ window: win });
+  });
+
+  ipcMain.on('reminder:add', (event, raw: unknown) => {
+    if (!isFromReminderForm(event)) return;
+    const reminder = parseRequest(raw, Date.now());
+    if (reminder && reminders.add(reminder)) {
+      send({ type: 'notice', text: `Anotado: te aviso ${reminder.daily ? 'todos los días a las' : 'a las'} ${clock(reminder.at).replace('mañana ', '')}.` });
+    }
+    reminderWin?.close();
+    refreshTray();
+  });
+
+  ipcMain.on('reminder:close', (event) => {
+    if (isFromReminderForm(event)) reminderWin?.close();
+  });
+
   createWindow();
   createTray();
+
+  const stopWatching = watchWindows((windows) => {
+    lastWindows = windows;
+    updateFullscreen();
+  });
+  app.on('before-quit', stopWatching);
 
   screen.on('display-metrics-changed', fitToDisplay);
   screen.on('display-added', fitToDisplay);

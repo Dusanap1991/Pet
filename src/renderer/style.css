@@ -53,6 +53,7 @@ body {
   opacity: 0;
   transition: opacity 0.18s ease;
   width: max-content;
+  white-space: pre-line;
 }
 
 .bubble.show {

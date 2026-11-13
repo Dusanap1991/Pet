@@ -11,6 +11,9 @@ const bridge: PetBridge = {
   setDragging(on) {
     ipcRenderer.send('pet:dragging', on === true);
   },
+  showMenu() {
+    ipcRenderer.send('pet:menu');
+  },
   ready() {
     ipcRenderer.send('pet:ready');
   },

@@ -93,6 +93,10 @@ function handle(e: PetEvent): void {
       for (let i = 0; i < 4; i++) fx.drop(head.x, head.y - 30 * scale, scale, i * 0.18);
       break;
     }
+    case 'reminder':
+      // Se queda hasta que hagas clic en el perro (o un minuto).
+      dog.remind(`⏰ ${e.text}`, 60_000);
+      break;
     case 'notice':
       dog.remind(e.text);
       break;
@@ -143,9 +147,13 @@ window.addEventListener('pointermove', (e) => {
 });
 
 window.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0) return;
   setCursor(e.clientX, e.clientY);
   if (!dog.hitTest(e.clientX, e.clientY)) return;
+  if (e.button === 2) {
+    bridge?.showMenu();
+    return;
+  }
+  if (e.button !== 0) return;
   pressing = true;
   dragging = false;
   pressX = e.clientX;
@@ -159,12 +167,14 @@ function endPress(): void {
     dog.release();
     bridge?.setDragging(false);
   } else {
+    bubble.dismiss();
     dog.pet();
   }
   pressing = false;
   dragging = false;
 }
 
+window.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('pointerup', endPress);
 window.addEventListener('pointercancel', endPress);
 window.addEventListener('blur', endPress);
