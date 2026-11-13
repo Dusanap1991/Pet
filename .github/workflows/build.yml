@@ -57,3 +57,27 @@ jobs:
           path: ${{ matrix.files }}
           if-no-files-found: error
           retention-days: 14
+
+  # Publica los instaladores como prerelease para tener enlaces de descarga directos.
+  release:
+    name: Publicar descarga
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: installers
+          merge-multiple: true
+      - name: Crear prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: build-${{ github.run_number }}
+        run: >
+          gh release create "$TAG" installers/*
+          --repo "${{ github.repository }}"
+          --target "${{ github.sha }}"
+          --title "Pet (compilación ${{ github.run_number }})"
+          --notes "Instaladores sin firmar para probar. Mac con procesador M: archivo arm64.dmg. Windows: archivo .exe."
+          --prerelease
