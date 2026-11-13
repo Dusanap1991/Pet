@@ -87,6 +87,12 @@ function handle(e: PetEvent): void {
     case 'treat':
       dropTreat();
       break;
+    case 'water': {
+      dog.remind(STR.water[Math.floor(Math.random() * STR.water.length)], 8000);
+      const head = dog.headOffset();
+      for (let i = 0; i < 4; i++) fx.drop(head.x, head.y - 30 * scale, scale, i * 0.18);
+      break;
+    }
     case 'notice':
       dog.remind(e.text);
       break;

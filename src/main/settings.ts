@@ -6,13 +6,22 @@ export interface Settings {
   size: PetSize;
   breakReminders: boolean;
   breakEveryMin: number;
+  waterReminders: boolean;
+  waterEveryMin: number;
   /** Pantalla donde vive el perro; sin valor, la principal. */
   displayId?: number;
 }
 
-export const DEFAULT_SETTINGS: Settings = { size: 'm', breakReminders: true, breakEveryMin: 50 };
+export const DEFAULT_SETTINGS: Settings = {
+  size: 'm',
+  breakReminders: true,
+  breakEveryMin: 50,
+  waterReminders: true,
+  waterEveryMin: 45,
+};
 
 export const BREAK_CHOICES = [30, 50, 90] as const;
+export const WATER_CHOICES = [30, 45, 60, 90] as const;
 
 /** Acepta cualquier cosa leída del disco y devuelve una configuración válida. */
 export function sanitizeSettings(raw: unknown): Settings {
@@ -23,6 +32,10 @@ export function sanitizeSettings(raw: unknown): Settings {
   if (typeof r.breakReminders === 'boolean') out.breakReminders = r.breakReminders;
   if (typeof r.breakEveryMin === 'number' && r.breakEveryMin >= 5 && r.breakEveryMin <= 240) {
     out.breakEveryMin = Math.round(r.breakEveryMin);
+  }
+  if (typeof r.waterReminders === 'boolean') out.waterReminders = r.waterReminders;
+  if (typeof r.waterEveryMin === 'number' && r.waterEveryMin >= 5 && r.waterEveryMin <= 240) {
+    out.waterEveryMin = Math.round(r.waterEveryMin);
   }
   if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;

@@ -19,7 +19,8 @@ import type { PetEvent, PetSize } from '../shared/types';
 import { ActivityTracker } from './activity';
 import { FocusSession } from './focus';
 import { checkForUpdate } from './updater';
-import { BREAK_CHOICES, loadSettings, saveSettings, type Settings } from './settings';
+import { WaterReminder } from './water';
+import { BREAK_CHOICES, WATER_CHOICES, loadSettings, saveSettings, type Settings } from './settings';
 
 declare const __PET_BUILD__: number;
 
@@ -50,6 +51,7 @@ let activityTimer: NodeJS.Timeout | undefined;
 
 const tracker = new ActivityTracker();
 const focus = new FocusSession();
+let water: WaterReminder;
 
 // ------------------------------------------------------------- ventana
 
@@ -273,6 +275,22 @@ function buildMenu(): Menu {
       })),
     },
     {
+      label: 'Avisarme de tomar agua',
+      type: 'checkbox',
+      checked: settings.waterReminders,
+      click: (item) => updateSettings({ waterReminders: item.checked }),
+    },
+    {
+      label: 'Agua cada',
+      enabled: settings.waterReminders,
+      submenu: WATER_CHOICES.map((m) => ({
+        label: `${m} minutos`,
+        type: 'radio' as const,
+        checked: settings.waterEveryMin === m,
+        click: () => updateSettings({ waterEveryMin: m }),
+      })),
+    },
+    {
       label: 'Tamaño',
       submenu: SIZES.map(([id, label]) => ({
         label,
@@ -344,8 +362,11 @@ function tickActivity(): void {
     breakEveryMin: settings.breakEveryMin,
   });
   for (const event of events) send(event);
+  // Que el aviso de agua no pise el saludo de bienvenida ni el aviso de descanso.
+  if (events.some((e) => e.type === 'back' || e.type === 'break-due')) water.postpone(now, 60_000);
 
   if (focus.tick(now)) {
+    water.postpone(now, 60_000);
     // Si estaba oculto, aparece: pediste que te avisara.
     showPet();
     send({ type: 'focus-end', completed: true, minutes: focus.minutes });
@@ -358,6 +379,16 @@ function tickActivity(): void {
       refreshTray();
     }
   }
+
+  const shown = win !== null && !win.isDestroyed() && win.isVisible();
+  const thirsty = water.tick({
+    now,
+    enabled: settings.waterReminders && shown,
+    everyMin: settings.waterEveryMin,
+    away: tracker.isAway,
+    quiet: focus.active,
+  });
+  if (thirsty) send({ type: 'water' });
 }
 
 // ---------------------------------------------------------------- app
@@ -365,6 +396,7 @@ function tickActivity(): void {
 function start(): void {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   settings = loadSettings(settingsFile);
+  water = new WaterReminder(Date.now(), settings.waterEveryMin);
 
   if (isWin) app.setAppUserModelId('com.dusanap1991.pet');
   if (isMac) app.dock?.hide();

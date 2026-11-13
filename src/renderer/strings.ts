@@ -3,5 +3,12 @@ export const STR = {
   welcomeBack: '¡Volviste! Te extrañé',
   breakDue: (min: number): string => `Llevamos ${min} min seguidos. ¿Estiramos las patas?`,
   focusStart: (min: number): string => `¡A concentrarse! Te aviso en ${min} min.`,
+  water: [
+    '¡Hora de tomar agua! 💧',
+    'Un vasito de agua, ¿sí? 💧',
+    'Yo ya tomé agua. ¿Y tú? 💧',
+    'Pausa para hidratarse 💧',
+    '¿Hace cuánto no tomas agua? 💧',
+  ],
   focusEnd: (min: number): string => `¡Listo! ${min} min de foco. Ahora toca un descanso.`,
 };

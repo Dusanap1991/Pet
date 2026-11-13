@@ -17,6 +17,8 @@ Para Windows y macOS.
 - **Te acompaña**: si dejas de usar el equipo un par de minutos se echa a dormir,
   y te recibe cuando vuelves.
 - **Te cuida**: avisa cuando llevas mucho rato sin parar (50 minutos por defecto).
+- **Te recuerda tomar agua**: desde que abre, cada 45 minutos (se puede cambiar o
+  apagar). Si no estás o estás en foco, espera a que vuelvas.
 - **Sesiones de foco**: elige 15, 25 o 45 minutos; se queda echado y tranquilo, y
   ladra cuando se cumple el tiempo.
 

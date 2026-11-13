@@ -32,6 +32,7 @@ export function setupDemo(emit: (e: PetEvent) => void): void {
   add('Me fui (duerme)', () => emit({ type: 'away' }));
   add('Volví', () => emit({ type: 'back', awaySec: 600 }));
   add('Aviso de descanso', () => emit({ type: 'break-due', minutes: 50 }));
+  add('Aviso de agua', () => emit({ type: 'water' }));
   add('Empezar foco', () => emit({ type: 'focus-start', minutes: 25 }));
   add('Terminar foco', () => emit({ type: 'focus-end', completed: true, minutes: 25 }));
   add('Chico', () => emit({ type: 'settings', size: 's' }));

@@ -1,6 +1,6 @@
 /** Partículas sueltas alrededor del perro: corazones, "z" de sueño, "!" y migas. */
 
-type Kind = 'heart' | 'z' | 'bang' | 'crumb';
+type Kind = 'heart' | 'z' | 'bang' | 'crumb' | 'drop';
 
 interface Particle {
   kind: Kind;
@@ -39,6 +39,14 @@ export class Fx {
     this.items.push({ kind: 'bang', x, y, vx: 0, vy: -10 * s, life: 0, max: 0.75, size: 22 * s, gravity: 0 });
   }
 
+  /** Gota de agua que cae junto al perro; `delay` escalona varias. */
+  drop(x: number, y: number, s: number, delay = 0): void {
+    this.items.push({
+      kind: 'drop', x: x + rand(-26, 26) * s, y: y + rand(-8, 8) * s, vx: 0, vy: 10 * s,
+      life: -delay, max: 1.1, size: rand(5, 7) * s, gravity: 160 * s,
+    });
+  }
+
   crumb(x: number, y: number, s: number): void {
     this.items.push({
       kind: 'crumb', x, y, vx: rand(-60, 60) * s, vy: -rand(40, 95) * s,
@@ -49,6 +57,7 @@ export class Fx {
   update(dt: number): void {
     for (const p of this.items) {
       p.life += dt;
+      if (p.life < 0) continue;
       p.vy += p.gravity * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -59,6 +68,7 @@ export class Fx {
 
   draw(ctx: CanvasRenderingContext2D): void {
     for (const p of this.items) {
+      if (p.life < 0) continue;
       const k = p.life / p.max;
       const alpha = Math.min(1, p.life / 0.1) * (k > 0.65 ? (1 - k) / 0.35 : 1);
       ctx.save();
@@ -93,6 +103,22 @@ export class Fx {
           ctx.strokeText(text, 0, 0);
           ctx.fillStyle = p.kind === 'z' ? '#FFFFFF' : '#FFD23F';
           ctx.fillText(text, 0, 0);
+          break;
+        }
+        case 'drop': {
+          const r = p.size;
+          ctx.beginPath();
+          ctx.moveTo(0, -r * 1.7);
+          ctx.bezierCurveTo(r * 0.5, -r * 0.8, r, -r * 0.2, r, r * 0.3);
+          ctx.arc(0, r * 0.3, r, 0, Math.PI);
+          ctx.bezierCurveTo(-r, -r * 0.2, -r * 0.5, -r * 0.8, 0, -r * 1.7);
+          ctx.closePath();
+          ctx.lineJoin = 'round';
+          ctx.lineWidth = Math.max(1.5, r * 0.35);
+          ctx.strokeStyle = OUTLINE;
+          ctx.stroke();
+          ctx.fillStyle = '#4FB3F6';
+          ctx.fill();
           break;
         }
         case 'crumb': {

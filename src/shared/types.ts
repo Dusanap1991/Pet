@@ -11,6 +11,7 @@ export type PetEvent =
   | { type: 'focus-start'; minutes: number }
   | { type: 'focus-end'; completed: boolean; minutes: number }
   | { type: 'treat' }
+  | { type: 'water' }
   | { type: 'notice'; text: string }
   | { type: 'settings'; size: PetSize };
 
