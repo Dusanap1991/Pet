@@ -87,6 +87,9 @@ function handle(e: PetEvent): void {
     case 'treat':
       dropTreat();
       break;
+    case 'notice':
+      dog.remind(e.text);
+      break;
     case 'settings':
       setSize(e.size);
       break;

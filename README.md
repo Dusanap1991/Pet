@@ -29,20 +29,32 @@ abrir al iniciar sesión.
 La única señal que lee del sistema es **cuántos segundos llevas sin tocar teclado
 o mouse** (para saber si te fuiste) y la posición del cursor (para saber si está
 sobre el perro). No registra teclas, no pide permisos de accesibilidad ni de
-grabación de pantalla, y no se conecta a internet.
+grabación de pantalla. Solo se conecta a internet para consultar en GitHub si hay
+una versión nueva.
 
 ## Instalar
 
-Los instaladores se generan en GitHub Actions: pestaña **Actions** → **Build** →
-**Run workflow**. Al terminar, descarga `Pet-Windows` o `Pet-macOS` desde los
-artefactos de la ejecución.
+Descarga el instalador desde la [última release](https://github.com/Dusanap1991/Pet/releases/latest):
+`arm64.dmg` para Mac con Apple silicon, `x64.dmg` para Mac Intel o `.exe` para Windows.
 
 Los instaladores no están firmados, así que el sistema avisa la primera vez:
 
 - **Windows**: en el aviso de SmartScreen, "Más información" → "Ejecutar de todas formas".
 - **macOS**: abre la app una vez y luego ve a Ajustes del Sistema → Privacidad y
-  seguridad → "Abrir de todos modos". Elige el `.dmg` `arm64` para Apple silicon
-  o `x64` para Intel.
+  seguridad → "Abrir de todos modos".
+
+## Actualizaciones
+
+Una vez instalada, la app se actualiza sola: al abrir (y cada 6 horas) consulta la
+última release del repo, baja el código nuevo y avisa. Se aplica al reiniciar,
+desde el menú de la bandeja ("Reiniciar para actualizar"). No reinstala nada: solo
+cambia el código del perro, por eso funciona aunque la app no esté firmada.
+
+Solo hay que volver a instalar si cambia la base de la app (la versión de
+Electron o `src/main/boot.ts`); en ese caso se sube `SHELL_VERSION` en
+`src/main/updater.ts` y las apps antiguas ignoran las actualizaciones nuevas.
+
+Para publicar una versión: pestaña **Actions** → **Build** → **Run workflow**.
 
 ## Desarrollo
 

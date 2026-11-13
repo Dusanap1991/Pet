@@ -5,7 +5,7 @@
   "description": "Un perro salchicha que vive en tu escritorio (Windows y macOS).",
   "private": true,
   "author": "Dusanap1991",
-  "main": "dist/main/main.js",
+  "main": "dist/main/boot.js",
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node scripts/build.mjs --dev && electron .",

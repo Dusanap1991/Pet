@@ -51,6 +51,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run dist
+        env:
+          PET_BUILD: ${{ github.run_number }}
       - uses: actions/upload-artifact@v7
         with:
           name: Pet-${{ matrix.name }}
@@ -58,19 +60,30 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Publica los instaladores como prerelease para tener enlaces de descarga directos.
+  # Publica los instaladores y el paquete de actualización. La app instalada
+  # consulta la última release y se actualiza sola (ver src/main/updater.ts).
   release:
-    name: Publicar descarga
+    name: Publicar
     needs: package
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Paquete de actualización
+        env:
+          PET_BUILD: ${{ github.run_number }}
+        run: npm run build && node scripts/make-update.mjs installers
       - uses: actions/download-artifact@v7
         with:
           path: installers
           merge-multiple: true
-      - name: Crear prerelease
+      - name: Crear release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: build-${{ github.run_number }}
@@ -79,5 +92,5 @@ jobs:
           --repo "${{ github.repository }}"
           --target "${{ github.sha }}"
           --title "Pet (compilación ${{ github.run_number }})"
-          --notes "Instaladores sin firmar para probar. Mac con procesador M: archivo arm64.dmg. Windows: archivo .exe."
-          --prerelease
+          --notes "Instaladores sin firmar. Mac con procesador M: archivo arm64.dmg. Windows: archivo .exe. Si ya tienes Pet instalado no hace falta bajar nada: se actualiza solo."
+          --latest

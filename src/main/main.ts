@@ -4,6 +4,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  net,
   powerMonitor,
   screen,
   Tray,
@@ -12,11 +13,15 @@ import {
   type Display,
   type Rectangle,
 } from 'electron';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { PetEvent, PetSize } from '../shared/types';
 import { ActivityTracker } from './activity';
 import { FocusSession } from './focus';
+import { checkForUpdate } from './updater';
 import { BREAK_CHOICES, loadSettings, saveSettings, type Settings } from './settings';
+
+declare const __PET_BUILD__: number;
 
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
@@ -25,6 +30,7 @@ const FOCUS_CHOICES = [15, 25, 45];
 const SIZES: [PetSize, string][] = [['s', 'Chico'], ['m', 'Mediano'], ['l', 'Grande']];
 /** Cada cuánto se mira dónde está el cursor para saber si está sobre el perro. */
 const CURSOR_POLL_MS = 33;
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -36,6 +42,9 @@ let lastCursorX = NaN;
 let lastCursorY = NaN;
 let lastFocusMin = -1;
 let dragging = false;
+/** Compilación ya descargada que se aplicará al reiniciar. */
+let updateReady: number | null = null;
+let checkingUpdate = false;
 let cursorTimer: NodeJS.Timeout | undefined;
 let activityTimer: NodeJS.Timeout | undefined;
 
@@ -114,7 +123,11 @@ function createWindow(): void {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event) => event.preventDefault());
 
-  win.once('ready-to-show', () => win?.showInactive());
+  win.once('ready-to-show', () => {
+    win?.showInactive();
+    // El perro llegó a mostrarse: la actualización en uso queda confirmada como sana.
+    fs.rmSync(path.join(updateRoot(), 'pending'), { force: true });
+  });
   win.on('closed', () => {
     win = null;
     rendererReady = false;
@@ -141,6 +154,47 @@ function toggleVisible(): void {
   if (win.isVisible()) win.hide();
   else showPet();
   refreshTray();
+}
+
+// ------------------------------------------------------ actualizaciones
+
+function updateRoot(): string {
+  return path.join(app.getPath('userData'), 'update');
+}
+
+/** Busca una versión nueva en GitHub y la deja lista para el próximo arranque. */
+async function lookForUpdate(manual: boolean): Promise<void> {
+  if (!app.isPackaged || checkingUpdate) return;
+  checkingUpdate = true;
+  try {
+    const build = await checkForUpdate(updateRoot(), updateReady ?? __PET_BUILD__, (url) => net.fetch(url, { cache: 'no-store' }));
+    if (build !== null) {
+      updateReady = build;
+      send({ type: 'notice', text: '¡Hay una versión nueva! Reinicia desde mi menú para estrenarla.' });
+    } else if (manual) {
+      send({ type: 'notice', text: updateReady ? 'La versión nueva ya está lista: reinicia desde mi menú.' : 'Ya tienes la última versión.' });
+    }
+  } catch (err) {
+    console.error('No se pudo buscar actualizaciones:', err);
+    if (manual) send({ type: 'notice', text: 'No pude buscar actualizaciones. ¿Hay internet?' });
+  } finally {
+    checkingUpdate = false;
+    refreshTray();
+  }
+}
+
+function restartToUpdate(): void {
+  app.relaunch();
+  app.quit();
+}
+
+function updateMenu(): MenuItemConstructorOptions[] {
+  const items: MenuItemConstructorOptions[] = [
+    { label: `Versión ${app.getVersion()} (compilación ${__PET_BUILD__})`, enabled: false },
+  ];
+  if (updateReady) items.push({ label: `Reiniciar para actualizar (compilación ${updateReady})`, click: restartToUpdate });
+  else if (app.isPackaged) items.push({ label: 'Buscar actualizaciones', click: () => void lookForUpdate(true) });
+  return items;
 }
 
 // ------------------------------------------------------------- bandeja
@@ -236,6 +290,8 @@ function buildMenu(): Menu {
       checked: app.isPackaged && app.getLoginItemSettings().openAtLogin,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
     },
+    { type: 'separator' },
+    ...updateMenu(),
     { type: 'separator' },
     { label: 'Salir', click: () => app.quit() },
   ];
@@ -346,6 +402,9 @@ function start(): void {
 
   cursorTimer = setInterval(pollCursor, CURSOR_POLL_MS);
   activityTimer = setInterval(tickActivity, 1000);
+
+  setTimeout(() => void lookForUpdate(false), 15_000);
+  setInterval(() => void lookForUpdate(false), UPDATE_CHECK_MS);
 }
 
 if (!app.requestSingleInstanceLock()) {

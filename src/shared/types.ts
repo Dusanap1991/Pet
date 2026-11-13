@@ -11,6 +11,7 @@ export type PetEvent =
   | { type: 'focus-start'; minutes: number }
   | { type: 'focus-end'; completed: boolean; minutes: number }
   | { type: 'treat' }
+  | { type: 'notice'; text: string }
   | { type: 'settings'; size: PetSize };
 
 /** API que el preload expone en `window.pet`. */
