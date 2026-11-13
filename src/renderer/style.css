@@ -1,0 +1,128 @@
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+#dog,
+.treat,
+.bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+#dog {
+  pointer-events: none;
+}
+
+.treat {
+  pointer-events: none;
+  line-height: 0;
+}
+
+.treat svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.bubble {
+  --tail: 50%;
+  max-width: 250px;
+  padding: 9px 13px;
+  border: 2px solid #3a2212;
+  border-radius: 14px;
+  background: #fffdf8;
+  color: #2b1b10;
+  font: 600 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  width: max-content;
+}
+
+.bubble.show {
+  opacity: 1;
+}
+
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: var(--tail);
+  bottom: -8px;
+  width: 12px;
+  height: 12px;
+  margin-left: -7px;
+  background: #fffdf8;
+  border-right: 2px solid #3a2212;
+  border-bottom: 2px solid #3a2212;
+  transform: rotate(45deg);
+}
+
+/* ---- Vista previa en el navegador (sin Electron) ---- */
+
+body.demo {
+  background: linear-gradient(160deg, #7fb4e6 0%, #b7d8f2 45%, #f3d9b8 100%);
+}
+
+body.demo.dark {
+  background: linear-gradient(160deg, #0f1626 0%, #1d2a44 60%, #35304a 100%);
+}
+
+.demo-taskbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
+  background: rgba(20, 24, 34, 0.82);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.demo-panel {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 560px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+  font: 13px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.demo-panel strong {
+  flex-basis: 100%;
+  color: #2b1b10;
+}
+
+.demo-panel button {
+  padding: 6px 10px;
+  border: 1px solid #c9b9a6;
+  border-radius: 8px;
+  background: #fff;
+  color: #2b1b10;
+  font: inherit;
+  cursor: pointer;
+}
+
+.demo-panel button:hover {
+  background: #f6ede2;
+}
