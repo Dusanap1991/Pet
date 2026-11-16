@@ -129,6 +129,12 @@ function handle(e: PetEvent): void {
     case 'settings':
       setSize(e.size);
       soundOn = e.sound;
+      dog.setLook(e.coat, e.outfit);
+      break;
+    case 'eyes':
+      // Regla 20-20-20: el globo se queda los 20 segundos y después da las gracias.
+      remind('👀 Mira algo lejano por 20 segundos…', 20_000);
+      setTimeout(() => dog.remind('¡Listo! Tus ojos te lo agradecen.', 3500), 20_500);
       break;
     case 'mood':
       dog.setMood(e.joy, e.food);
@@ -308,6 +314,14 @@ window.addEventListener('resize', () => {
   measure();
   sizeCanvas();
 });
+
+/** De noche (22:00 a 6:00) está más dormilón. */
+function updateNight(): void {
+  const h = new Date().getHours();
+  dog.night = h >= 22 || h < 6;
+}
+updateNight();
+setInterval(updateNight, 60_000);
 
 measure();
 sizeCanvas();

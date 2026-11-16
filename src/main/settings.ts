@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { PetSize } from '../shared/types';
+import type { Coat, PetSize } from '../shared/types';
 
 export interface Settings {
   size: PetSize;
@@ -20,6 +20,21 @@ export interface Settings {
   dropFolder: string;
   deviceAlerts: boolean;
   taskNudges: boolean;
+  /** Durante una reunión del calendario, los avisos esperan a que termine. */
+  quietInMeetings: boolean;
+  /** Atajos de teclado globales. */
+  shortcuts: boolean;
+  endOfDay: boolean;
+  /** "HH:MM". */
+  endOfDayTime: string;
+  weeklySummary: boolean;
+  lateNight: boolean;
+  /** Regla 20-20-20 para la vista. */
+  eyeBreaks: boolean;
+  weatherCity: string;
+  weatherPlace: { name: string; lat: number; lon: number } | null;
+  costumes: boolean;
+  coat: Coat;
   /** Pantalla donde vive el perro; sin valor, la principal. */
   displayId?: number;
 }
@@ -38,7 +53,26 @@ export const DEFAULT_SETTINGS: Settings = {
   dropFolder: '',
   deviceAlerts: true,
   taskNudges: true,
+  quietInMeetings: true,
+  shortcuts: true,
+  endOfDay: true,
+  endOfDayTime: '18:00',
+  weeklySummary: true,
+  lateNight: true,
+  eyeBreaks: false,
+  weatherCity: '',
+  weatherPlace: null,
+  costumes: true,
+  coat: 'red',
 };
+
+export const COATS: [Coat, string][] = [
+  ['red', 'Colorado'],
+  ['blacktan', 'Negro y fuego'],
+  ['chocolate', 'Chocolate'],
+  ['cream', 'Crema'],
+  ['dapple', 'Arlequín'],
+];
 
 export const BREAK_CHOICES = [30, 50, 90] as const;
 export const WATER_CHOICES = [30, 45, 60, 90] as const;
@@ -69,6 +103,16 @@ export function sanitizeSettings(raw: unknown): Settings {
   if (typeof r.dropFolder === 'string' && (r.dropFolder === '' || path.isAbsolute(r.dropFolder))) out.dropFolder = r.dropFolder;
   if (typeof r.deviceAlerts === 'boolean') out.deviceAlerts = r.deviceAlerts;
   if (typeof r.taskNudges === 'boolean') out.taskNudges = r.taskNudges;
+  for (const key of ['quietInMeetings', 'shortcuts', 'endOfDay', 'weeklySummary', 'lateNight', 'eyeBreaks', 'costumes'] as const) {
+    if (typeof r[key] === 'boolean') out[key] = r[key] as boolean;
+  }
+  if (typeof r.endOfDayTime === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(r.endOfDayTime.trim())) out.endOfDayTime = r.endOfDayTime.trim();
+  if (typeof r.weatherCity === 'string') out.weatherCity = r.weatherCity.replace(/\s+/g, ' ').trim().slice(0, 80);
+  const place = r.weatherPlace as Record<string, unknown> | null | undefined;
+  if (place && typeof place.name === 'string' && typeof place.lat === 'number' && typeof place.lon === 'number') {
+    out.weatherPlace = { name: place.name.slice(0, 120), lat: place.lat, lon: place.lon };
+  }
+  if (COATS.some(([id]) => id === r.coat)) out.coat = r.coat as Coat;
   if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;
 }

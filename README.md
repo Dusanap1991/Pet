@@ -35,6 +35,27 @@ Para Windows y macOS.
 - **Tiene su personalidad**: ponle nombre en Ajustes, juega a la pelota con él
   (lánzala con el mouse y te la trae), y cuídalo: se pone triste si no le haces
   caso y pide comida si no le das premios. Los ladridos con sonido son opcionales.
+- **Silencio en reuniones**: mientras estás en una reunión del calendario, los
+  avisos esperan y te los da todos juntos al terminar.
+- **Atajos de teclado**: `Control` + `Alt` (`⌥ Opción` en Mac) + `N` para una nota
+  rápida ("Enviar informe" es una tarea; "en 20 min llamar a Ana" o "a las 16:00
+  remedio" es un recordatorio), `+ F` para empezar o detener un foco y `+ P` para
+  mostrar o esconder al perro.
+- **Pomodoro**: 25 minutos de foco y 5 de descanso, con un descanso largo cada 4.
+- **Fin de jornada y resumen semanal**: a la hora que elijas (lunes a viernes) te
+  dice que ya es hora de cortar, con lo que hiciste y lo que queda para mañana; el
+  viernes en la tarde, el resumen de la semana. Si trabajas pasadas las 23:00 te
+  dice que ya es tarde.
+- **Descanso de la vista** (opcional): regla 20-20-20, cada 20 minutos.
+- **Clima de la mañana**: con tu ciudad en Ajustes, te cuenta el pronóstico al
+  llegar (con Open-Meteo, gratis y sin cuenta).
+- **Logros**: 19 medallas en "Mi día" (rachas, vasos de agua, focos, tareas…).
+- **Juega y hace gracias**: si mueves el mouse rápido cerca del suelo, hace una
+  reverencia y lo persigue; además bosteza, se estira, se sacude y persigue su cola.
+  De noche está más dormilón.
+- **Pelajes y disfraces**: colorado, negro y fuego, chocolate, crema o arlequín;
+  gorro en Navidad, sombrero de bruja en Halloween y bufanda en invierno (según tu
+  hemisferio).
 - **Sesiones de foco**: elige 15, 25 o 45 minutos; se queda echado y tranquilo, y
   ladra cuando se cumple el tiempo.
 
@@ -50,7 +71,8 @@ sobre el perro). No registra teclas, no pide permisos de accesibilidad ni de
 grabación de pantalla. En macOS, para saber si hay algo en pantalla completa, mira
 la posición y el tamaño de las ventanas abiertas, nunca su contenido ni su título.
 Solo se conecta a internet para consultar en GitHub si hay
-una versión nueva y, si lo configuras, para leer tu calendario. La dirección del
+una versión nueva y, si lo configuras, para leer tu calendario y consultar el
+clima (solo se envía la ciudad). La dirección del
 calendario, tus tareas y el resumen del día quedan guardados solo en tu equipo.
 Los archivos que sueltas sobre el perro solo se mueven cuando eliges adónde.
 

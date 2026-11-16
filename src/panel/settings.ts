@@ -8,6 +8,19 @@ interface PanelSettings {
   dropFolder: string;
   deviceAlerts: boolean;
   taskNudges: boolean;
+  quietInMeetings: boolean;
+  shortcuts: boolean;
+  shortcutsOk: boolean;
+  endOfDay: boolean;
+  endOfDayTime: string;
+  weeklySummary: boolean;
+  lateNight: boolean;
+  eyeBreaks: boolean;
+  weatherCity: string;
+  weatherPlace: string;
+  costumes: boolean;
+  coat: string;
+  coats: [string, string][];
 }
 
 const set = (patch: Partial<PanelSettings>): Promise<unknown> => panel().invoke('settings:set', patch);
@@ -16,7 +29,16 @@ const name = $<HTMLInputElement>('name');
 const url = $<HTMLInputElement>('calendarUrl');
 const lead = $<HTMLSelectElement>('meetingLeadMin');
 const status = $<HTMLParagraphElement>('calendar-status');
-const checks = ['sound', 'deviceAlerts', 'taskNudges'] as const;
+const checks = [
+  'sound', 'deviceAlerts', 'taskNudges', 'quietInMeetings', 'shortcuts', 'endOfDay', 'weeklySummary', 'lateNight', 'eyeBreaks', 'costumes',
+] as const;
+const coat = $<HTMLSelectElement>('coat');
+const endTime = $<HTMLInputElement>('endOfDayTime');
+const city = $<HTMLInputElement>('weatherCity');
+const weatherStatus = $<HTMLParagraphElement>('weather-status');
+
+// En Mac la tecla se llama Opción.
+if (navigator.platform.toLowerCase().includes('mac')) for (const id of ['alt1', 'alt2', 'alt3']) $(id).textContent = '⌥ Opción';
 
 function showStatus(text: string, kind: 'ok' | 'error' | '' = ''): void {
   status.textContent = text;
@@ -29,12 +51,37 @@ async function load(): Promise<void> {
   if (document.activeElement !== url) url.value = s.calendarUrl;
   lead.value = String(s.meetingLeadMin);
   for (const key of checks) $<HTMLInputElement>(key).checked = s[key];
+  if (coat.options.length === 0) for (const [id, label] of s.coats) coat.add(new Option(label, id));
+  coat.value = s.coat;
+  if (document.activeElement !== endTime) endTime.value = s.endOfDayTime;
+  endTime.disabled = !s.endOfDay;
+  if (document.activeElement !== city) city.value = s.weatherCity;
+  if (s.weatherPlace && !weatherStatus.textContent) {
+    weatherStatus.textContent = `Ubicación: ${s.weatherPlace}`;
+    weatherStatus.className = 'status';
+  }
+  $('shortcuts-status').textContent = s.shortcuts && !s.shortcutsOk ? 'Algún atajo ya lo usa otra aplicación y no se pudo activar.' : '';
   $('dropFolder').textContent = s.dropFolder || 'Sin carpeta: te pregunto cada vez';
   $('dropFolder').title = s.dropFolder;
   $<HTMLButtonElement>('clearFolder').hidden = !s.dropFolder;
 }
 
 name.addEventListener('change', () => void set({ name: name.value }));
+coat.addEventListener('change', () => void set({ coat: coat.value }));
+endTime.addEventListener('change', () => void set({ endOfDayTime: endTime.value }));
+
+async function testWeather(): Promise<void> {
+  weatherStatus.textContent = 'Consultando…';
+  weatherStatus.className = 'status';
+  const r = await panel().invoke<{ ok: boolean; message: string }>('weather:test', city.value);
+  weatherStatus.textContent = r.message;
+  weatherStatus.className = `status ${r.ok ? 'ok' : 'error'}`;
+}
+city.addEventListener('change', () => {
+  weatherStatus.textContent = '';
+  void set({ weatherCity: city.value }).then(() => (city.value.trim() ? testWeather() : undefined));
+});
+$('weatherTest').addEventListener('click', () => void testWeather());
 lead.addEventListener('change', () => void set({ meetingLeadMin: Number(lead.value) }));
 for (const key of checks) {
   const box = $<HTMLInputElement>(key);

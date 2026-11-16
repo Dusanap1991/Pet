@@ -70,6 +70,11 @@ export function parseCalendar(ics: string, from: number, to: number): Meeting[] 
   return out.sort((a, b) => a.start - b.start);
 }
 
+/** La reunión en curso, si hay (para dejar los avisos en pausa). */
+export function currentMeeting(meetings: Meeting[], now: number): Meeting | null {
+  return meetings.find((m) => m.start <= now && now < m.end) ?? null;
+}
+
 /** Decide cuándo avisar de cada reunión (una sola vez por reunión). */
 export class MeetingAlerts {
   private sent = new Set<string>();

@@ -41,9 +41,12 @@ export function setupDemo(emit: (e: PetEvent) => void): void {
   add('Triste', () => emit({ type: 'mood', joy: 10, food: 10 }));
   add('Feliz', () => emit({ type: 'mood', joy: 90, food: 90 }));
   add('Tareas', () => emit({ type: 'notice', text: '¡Buen día! Para hoy tienes 2:\n• Enviar informe\n• Llamar a Ana' }));
-  add('Chico', () => emit({ type: 'settings', size: 's', sound: false, name: '' }));
-  add('Mediano', () => emit({ type: 'settings', size: 'm', sound: false, name: '' }));
-  add('Grande', () => emit({ type: 'settings', size: 'l', sound: false, name: '' }));
+  const look = { size: 'm' as const, sound: false, name: '' };
+  add('Navidad', () => emit({ type: 'settings', ...look, coat: 'red', outfit: 'santa' }));
+  add('Halloween', () => emit({ type: 'settings', ...look, coat: 'blacktan', outfit: 'witch' }));
+  add('Bufanda', () => emit({ type: 'settings', ...look, coat: 'dapple', outfit: 'scarf' }));
+  add('Sin disfraz', () => emit({ type: 'settings', ...look, coat: 'red', outfit: null }));
+  add('Vista 20-20-20', () => emit({ type: 'eyes' }));
   add('Fondo claro/oscuro', () => document.body.classList.toggle('dark'));
 
   document.body.appendChild(panel);

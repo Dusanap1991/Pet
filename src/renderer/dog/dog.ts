@@ -1,12 +1,13 @@
 import type { BallTarget } from '../ball';
 import type { Fx } from '../fx';
-import { drawDog, drawDogFront, frontHeight, type DrawExtras } from './draw';
+import { COATS, DACHSHUND, drawDog, drawDogFront, frontHeight, type DrawExtras, type OutfitKind, type Palette } from './draw';
 import { LIE, SIT, SLEEP, STAND, approachPose, clonePose, type Pose } from './pose';
 
 export type DogState =
   | 'idle' | 'walk' | 'sniff' | 'run' | 'sit' | 'lie' | 'sleep'
   | 'alert' | 'eat' | 'happy' | 'bark' | 'drag' | 'fall' | 'land'
-  | 'fetch' | 'pickup' | 'carry';
+  | 'fetch' | 'pickup' | 'carry'
+  | 'bow' | 'chase' | 'yawn' | 'stretch' | 'shake' | 'spin';
 
 type Posture = 'stand' | 'sit' | 'lie' | 'sleep';
 
@@ -62,6 +63,7 @@ const WAG: Record<DogState, [number, number]> = {
   lie: [0.06, 3], sleep: [0, 2], alert: [0.04, 4], eat: [0.45, 13], happy: [0.6, 17],
   bark: [0.3, 12], drag: [0, 4], fall: [0, 4], land: [0.12, 6],
   fetch: [0.3, 11], pickup: [0.4, 12], carry: [0.5, 13],
+  bow: [0.6, 16], chase: [0.45, 14], yawn: [0.05, 3], stretch: [0.35, 9], shake: [0.2, 8], spin: [0.5, 15],
 };
 
 function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
@@ -139,6 +141,17 @@ export class Dog {
   /** 0 = triste, 100 = feliz; 0 = hambriento, 100 = lleno. */
   private joy = 70;
   private food = 80;
+  private palette: Palette = DACHSHUND;
+  private outfit: OutfitKind = null;
+  /** De noche está más dormilón. */
+  night = false;
+  /** Velocidad del cursor (px/s, suavizada) para saber si lo estás moviendo como un juguete. */
+  private cursorSpeed = 0;
+  private lastCX = NaN;
+  private lastCY = NaN;
+  private playT = 0;
+  private slowT = 0;
+  private chaseCooldown = 0;
   private world: World = { width: 800, floorY: 600, cursorX: 0, cursorY: 0, cursorKnown: false };
 
   constructor(scale: number, private fx: Fx, private hooks: DogHooks) {
@@ -214,6 +227,11 @@ export class Dog {
     return this.joy < 35;
   }
 
+  setLook(coat: string, outfit: OutfitKind): void {
+    this.palette = COATS[coat] ?? DACHSHUND;
+    this.outfit = outfit;
+  }
+
   setMood(joy: number, food: number): void {
     this.joy = joy;
     this.food = food;
@@ -245,7 +263,7 @@ export class Dog {
   /** Una caricia. */
   pet(): void {
     if (this.state === 'drag' || this.state === 'fall' || this.state === 'land' || this.state === 'eat') return;
-    if (this.state === 'run' || this.state === 'alert') return;
+    if (['run', 'alert', 'bow', 'chase', 'fetch', 'pickup', 'carry', 'spin'].includes(this.state)) return;
     this.enter('happy', 1.9);
     this.spawnHeart();
   }
@@ -345,6 +363,7 @@ export class Dog {
     this.t += dt;
     this.stateT += dt;
 
+    this.trackCursor(dt, world);
     this.think(dt);
 
     const airborne = this.state === 'drag' || this.state === 'fall';
@@ -361,7 +380,7 @@ export class Dog {
     this.faceVis += (this.facing - this.faceVis) * (1 - Math.exp(-16 * dt));
 
     // Marcha: las patas se mueven según la distancia recorrida, así no patinan.
-    const moving = this.state === 'walk' || this.state === 'sniff' || this.state === 'run';
+    const moving = ['walk', 'sniff', 'run', 'fetch', 'carry', 'chase', 'spin'].includes(this.state);
     this.gait += ((moving ? 1 : 0) - this.gait) * (1 - Math.exp(-12 * dt));
 
     // Cola.
@@ -405,23 +424,23 @@ export class Dog {
   private think(dt: number): void {
     switch (this.state) {
       case 'idle':
-        if (this.noticeTreat() || this.noticeBall()) return;
+        if (this.noticeTreat() || this.noticeBall() || this.noticeCursor()) return;
         this.turnTowardCursor(dt);
         if (this.stateT >= this.stateDur) this.chooseFromIdle();
         break;
 
       case 'walk':
-        if (this.noticeTreat() || this.noticeBall()) return;
+        if (this.noticeTreat() || this.noticeBall() || this.noticeCursor()) return;
         if (this.moveToward(dt, 42)) this.enter('idle', rand(1.5, 5));
         break;
 
       case 'sniff':
-        if (this.noticeTreat() || this.noticeBall()) return;
+        if (this.noticeTreat() || this.noticeBall() || this.noticeCursor()) return;
         if (this.moveToward(dt, 20)) this.enter('idle', rand(1.5, 4));
         break;
 
       case 'sit':
-        if (this.noticeTreat() || this.noticeBall()) return;
+        if (this.noticeTreat() || this.noticeBall() || this.noticeCursor()) return;
         if (this.stateT >= this.stateDur) {
           const r = Math.random();
           if (this.awayMode || this.focusMode || r < 0.3) this.enter('lie', rand(8, 18));
@@ -436,7 +455,7 @@ export class Dog {
           const r = Math.random();
           if (this.awayMode) this.enter('sleep');
           else if (this.focusMode) r < 0.35 ? this.enter('sleep', rand(20, 45)) : this.enter('lie', rand(20, 40));
-          else if (r < 0.4) this.enter('sleep', rand(25, 70));
+          else if (r < (this.night ? 0.75 : 0.4)) this.enter('sleep', this.night ? rand(60, 180) : rand(25, 70));
           else if (r < 0.88) this.enter('idle', rand(1.5, 4));
           else this.enter('lie', rand(6, 12));
         }
@@ -553,6 +572,56 @@ export class Dog {
         break;
       }
 
+      case 'bow':
+        // Reverencia de juego antes de salir corriendo.
+        if (this.world.cursorKnown) this.facing = this.world.cursorX >= this.x ? 1 : -1;
+        if (this.stateT >= this.stateDur) {
+          this.playT = 0;
+          this.slowT = 0;
+          this.enter('chase');
+        }
+        break;
+
+      case 'chase': {
+        const w = this.world;
+        this.playT += dt;
+        // Se aburre si dejas el mouse quieto, si lo subes lejos del suelo o tras un rato.
+        this.slowT = this.cursorSpeed < 160 || !this.cursorLow() ? this.slowT + dt : 0;
+        if (this.slowT > 1.3 || this.playT > 12) {
+          this.chaseCooldown = 8;
+          this.hooks.played();
+          this.enter('happy', 1.2);
+          this.spawnHeart();
+          break;
+        }
+        const reach = (MOUTH_REACH - 12) * this.scale;
+        const side = w.cursorX >= this.x ? 1 : -1;
+        const [lo, hi] = this.bounds();
+        this.targetX = clamp(w.cursorX - side * reach, lo, hi);
+        this.moveToward(dt, 230);
+        if (Math.abs(this.targetX - this.x) < 4 * this.scale) this.facing = side;
+        break;
+      }
+
+      case 'spin': {
+        // Persigue su cola: da vueltas en el lugar.
+        const period = 0.22;
+        const flips = Math.floor(this.stateT / period);
+        if (Math.floor((this.stateT - dt) / period) !== flips) this.facing = this.facing === 1 ? -1 : 1;
+        this.gaitPhase = (this.gaitPhase + dt * 2.6) % 1;
+        if (this.stateT >= this.stateDur) this.enter('idle', rand(1, 2));
+        break;
+      }
+
+      case 'yawn':
+      case 'stretch':
+      case 'shake':
+        if (this.stateT >= this.stateDur) {
+          if (this.state === 'yawn' && this.night) this.enter('lie', rand(10, 25));
+          else this.enter('idle', rand(1, 3));
+        }
+        break;
+
       case 'happy':
         this.fxTimer += dt;
         if (this.fxTimer >= 0.38) {
@@ -601,6 +670,15 @@ export class Dog {
   private chooseFromIdle(): void {
     if (this.awayMode) return this.enter('lie', 1.2);
     if (this.focusMode) return this.enter('lie', rand(20, 40));
+    // De vez en cuando, una gracia (de noche, sobre todo bostezos).
+    if (Math.random() < (this.night ? 0.2 : 0.13)) {
+      const tricks: [DogState, number][] = this.night
+        ? [['yawn', 2], ['yawn', 2], ['stretch', 2], ['shake', 1.1]]
+        : [['yawn', 2], ['stretch', 2], ['shake', 1.1], ['spin', 1.7], ['spin', 1.7]];
+      const [trick, dur] = tricks[Math.floor(Math.random() * tricks.length)];
+      if (!(trick === 'spin' && (this.sad || this.food < 25))) return this.enter(trick, dur);
+    }
+    if (this.night && Math.random() < 0.6) return this.enter('lie', rand(10, 25));
     // Triste o con hambre: se mueve menos.
     const r = Math.random() * (this.sad || this.food < 25 ? 0.6 : 1) + (this.sad ? 0.4 : 0);
     if (r < 0.45) this.startWalk();
@@ -637,6 +715,33 @@ export class Dog {
     this.facing = treat.x >= this.x ? 1 : -1;
     const h = this.headOffset();
     this.fx.bang(h.x, h.y - 34 * this.scale, this.scale);
+    return true;
+  }
+
+  /** Mide qué tan rápido mueves el cursor. */
+  private trackCursor(dt: number, w: World): void {
+    if (dt <= 0 || !w.cursorKnown) return;
+    if (!Number.isNaN(this.lastCX)) {
+      const v = Math.hypot(w.cursorX - this.lastCX, w.cursorY - this.lastCY) / dt;
+      this.cursorSpeed += (Math.min(v, 5000) - this.cursorSpeed) * (1 - Math.exp(-6 * dt));
+    }
+    this.lastCX = w.cursorX;
+    this.lastCY = w.cursorY;
+    this.chaseCooldown = Math.max(0, this.chaseCooldown - dt);
+  }
+
+  /** El cursor anda cerca del suelo, a su alcance. */
+  private cursorLow(): boolean {
+    const w = this.world;
+    return w.cursorY > w.floorY - 170 * this.scale && w.cursorY <= w.floorY + 4;
+  }
+
+  /** Si mueves el cursor rápido cerca de él, lo toma como un juguete. */
+  private noticeCursor(): boolean {
+    const w = this.world;
+    if (!w.cursorKnown || this.chaseCooldown > 0 || this.awayMode || this.focusMode || this.sad) return false;
+    if (this.cursorSpeed < 900 || !this.cursorLow() || Math.abs(w.cursorX - this.x) > 450 * this.scale) return false;
+    this.enter('bow', 0.55);
     return true;
   }
 
@@ -713,6 +818,61 @@ export class Dog {
         tp.snoutAng = 0.62 + 0.05 * Math.sin(this.t * 22);
         tp.earAng = 0.05;
         break;
+      case 'bow':
+      case 'stretch': {
+        // Reverencia: patas delanteras estiradas, pecho abajo y cola arriba.
+        const k = this.state === 'stretch' ? Math.min(1, Math.sin(Math.min(1, st / this.stateDur) * Math.PI) * 1.6) : 1;
+        tp.chestY += 13 * k;
+        tp.headY += 15 * k;
+        tp.headX += 8 * k;
+        tp.ffx += 14 * k;
+        tp.ffx2 += 14 * k;
+        tp.rumpY -= 3 * k;
+        tp.tailAng = -2.15;
+        tp.earAng += 0.2 * k;
+        if (this.state === 'stretch') {
+          tp.eyeOpen = k > 0.6 ? 0 : 1;
+          tp.mouthOpen = k > 0.7 ? 0.35 : 0;
+        } else {
+          tp.mouthOpen = 0.35;
+          tp.tongue = 0.8;
+        }
+        break;
+      }
+      case 'chase':
+        tp.earAng = 0.8;
+        tp.tailAng = -2.4;
+        tp.mouthOpen = 0.35;
+        tp.tongue = 1;
+        tp.headY += 4;
+        tp.snoutAng += 0.15;
+        break;
+      case 'spin':
+        tp.headY += 3;
+        tp.snoutAng += 0.2;
+        tp.tailAng = -2.4;
+        tp.mouthOpen = 0.3;
+        tp.tongue = 0.8;
+        break;
+      case 'yawn': {
+        const k = Math.sin(Math.min(1, st / this.stateDur) * Math.PI);
+        tp.snoutAng -= 0.45 * k;
+        tp.headY -= 3 * k;
+        tp.mouthOpen = k;
+        tp.tongue = 0.4 * k;
+        tp.eyeOpen = k > 0.35 ? 0 : 1;
+        tp.earAng += 0.25 * k;
+        break;
+      }
+      case 'shake': {
+        const k = Math.sin(st * 34) * Math.min(1, (this.stateDur - st) * 3);
+        tp.earAng += 0.9 * k;
+        tp.snoutAng += 0.12 * k;
+        tp.headY -= 2;
+        tp.eyeOpen = 0;
+        tp.chestY += 1.2 * k;
+        break;
+      }
       case 'fetch':
         tp.earAng = 0.95;
         tp.tailAng = -2.95;
@@ -901,6 +1061,7 @@ export class Dog {
       breath: Math.sin(this.t * (this.posture === 'sleep' ? 1.7 : 2.8)) * (this.posture === 'sleep' ? 1.6 : 0.8),
       wag: this.wagAmp * Math.sin(this.wagPhase),
       wagLag: this.wagAmp * Math.sin(this.wagPhase - 0.9),
+      outfit: this.outfit,
     };
 
     if (this.front >= 0.5) {
@@ -921,7 +1082,8 @@ export class Dog {
         sit: this.frontSit,
         scruff: this.frontScruff,
         earLift: this.frontEars,
-      });
+        outfit: this.outfit,
+      }, this.palette);
       ctx.restore();
       return;
     }
@@ -945,7 +1107,7 @@ export class Dog {
       ctx.rotate(this.rot * this.facing - this.hang * HANG_MAX);
       ctx.translate(-px, -py);
     }
-    drawDog(ctx, this.render, extras);
+    drawDog(ctx, this.render, extras, this.palette);
     ctx.restore();
   }
 }

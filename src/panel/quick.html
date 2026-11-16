@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nota rápida</title>
+    <link rel="stylesheet" href="panel.css" />
+    <style>
+      main { padding: 16px 18px; gap: 8px; }
+      form { display: block; width: 100%; }
+      #text { display: block; width: 100%; font-size: 15px; padding: 10px 12px; }
+      .hint { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <form id="form" autocomplete="off">
+        <input id="text" type="text" maxlength="140" placeholder="Enviar informe · en 20 min llamar a Ana · a las 16:00 remedio" aria-label="Nota rápida" autofocus />
+      </form>
+      <p class="hint">Enter guarda una tarea. Si empiezas con "en 20 min…" o "a las 16:00…", es un recordatorio. Esc cierra.</p>
+    </main>
+    <script src="quick.js"></script>
+  </body>
+</html>

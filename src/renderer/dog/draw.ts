@@ -13,6 +13,11 @@ export interface Palette {
   tongue: string;
   mouth: string;
   eye: string;
+  /** Color del hocico y las patas (negro y fuego); si falta, el del pelaje. */
+  points?: string;
+  pointsDark?: string;
+  /** Manchas (arlequín). */
+  spots?: string;
 }
 
 /** Salchicha colorado clásico. */
@@ -29,6 +34,20 @@ export const DACHSHUND: Palette = {
   eye: '#1E130C',
 };
 
+/** Pelajes. */
+export const COATS: Record<string, Palette> = {
+  red: DACHSHUND,
+  blacktan: {
+    ...DACHSHUND, fur: '#2E2622', furDark: '#1C1714', furLight: '#C9894D', points: '#B8743C', pointsDark: '#8E5528',
+    outline: '#120D0A', nose: '#0D0A08', eye: '#0D0A08',
+  },
+  chocolate: { ...DACHSHUND, fur: '#6B3F26', furDark: '#4E2C1A', furLight: '#B07A52', points: '#9A6440', pointsDark: '#77492C', outline: '#2A170C', nose: '#3A2216' },
+  cream: { ...DACHSHUND, fur: '#E9C79A', furDark: '#C9A273', furLight: '#F6E4C8', outline: '#5A3D22' },
+  dapple: { ...DACHSHUND, fur: '#8A8580', furDark: '#605B57', furLight: '#C8C2BB', spots: '#3B3633', points: '#B57A47', pointsDark: '#8C5A32', outline: '#24201D', nose: '#1A1715' },
+};
+
+export type OutfitKind = 'santa' | 'witch' | 'scarf' | null;
+
 /** Valores que oscilan rápido y no pasan por el suavizado de la pose. */
 export interface DrawExtras {
   /** -1..1, respiración. */
@@ -37,6 +56,7 @@ export interface DrawExtras {
   wag: number;
   /** Igual que `wag` pero con retardo, para que la punta llegue después. */
   wagLag: number;
+  outfit?: OutfitKind;
 }
 
 interface Part {
@@ -126,8 +146,8 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
   group(
     ctx,
     [
-      ...leg(p.rumpX - 7, p.rumpY + 8, p.rfx2, p.rfy2, pal.furDark),
-      ...leg(p.chestX - 10, p.chestY + 8, p.ffx2, p.ffy2, pal.furDark),
+      ...leg(p.rumpX - 7, p.rumpY + 8, p.rfx2, p.rfy2, pal.pointsDark ?? pal.furDark),
+      ...leg(p.chestX - 10, p.chestY + 8, p.ffx2, p.ffy2, pal.pointsDark ?? pal.furDark),
     ],
     O,
   );
@@ -160,7 +180,7 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
       }],
       O,
     );
-    group(ctx, [{ path: (c) => capsule(c, hX, hY, 5.5, jtX, jtY, 3.2), fill: pal.fur }], O);
+    group(ctx, [{ path: (c) => capsule(c, hX, hY, 5.5, jtX, jtY, 3.2), fill: pal.points ?? pal.fur }], O);
     if (p.tongue > 0.05) {
       const t = p.tongue;
       const t0x = hX + jdX * 12 - jpX * 2.5, t0y = hY + jdY * 12 - jpY * 2.5;
@@ -186,13 +206,29 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
     main.push({ path: (c) => capsule(c, bx, by, 9, bx + 3 * p.scruff, by - 12 * p.scruff, 3.6), fill: pal.fur });
   }
   main.push(
-    ...leg(p.rumpX + 2, p.rumpY + 9, p.rfx, p.rfy, pal.fur),
-    ...leg(p.chestX - 2, p.chestY + 9, p.ffx, p.ffy, pal.fur),
+    ...leg(p.rumpX + 2, p.rumpY + 9, p.rfx, p.rfy, pal.points ?? pal.fur),
+    ...leg(p.chestX - 2, p.chestY + 9, p.ffx, p.ffy, pal.points ?? pal.fur),
     { path: (c) => capsule(c, neckAx, neckAy, 12.5, neckBx, neckBy, 11), fill: pal.fur },
     { path: (c) => capsule(c, p.headX, p.headY, 16.5, p.headX, p.headY, 16.5), fill: pal.fur },
-    { path: (c) => capsule(c, sbX, sbY, 10, tipX, tipY, 6.3), fill: pal.fur },
+    { path: (c) => capsule(c, sbX, sbY, 10, tipX, tipY, 6.3), fill: pal.points ?? pal.fur },
   );
   group(ctx, main, O);
+
+  // --- Manchas (arlequín), solo dentro del cuerpo
+  if (pal.spots) {
+    ctx.save();
+    ctx.beginPath();
+    capsule(ctx, p.rumpX, p.rumpY, 15, p.chestX, p.chestY, chestR);
+    ctx.clip();
+    ctx.fillStyle = pal.spots;
+    const spots: [number, number, number][] = [[0.12, -6, 5], [0.3, 4, 6.5], [0.52, -9, 4], [0.66, 6, 5], [0.84, -3, 4.5]];
+    for (const [t, off, r] of spots) {
+      ctx.beginPath();
+      ctx.ellipse(p.rumpX + (p.chestX - p.rumpX) * t, p.rumpY + (p.chestY - p.rumpY) * t + off, r * 1.3, r, 0.2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 
   // --- Líneas interiores: hombro y muslo, para que las patas no se pierdan en el cuerpo
   ctx.save();
@@ -241,6 +277,13 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
     ctx.fill();
   }
 
+  // --- Bufanda (invierno): tapa el collar y le cuelga una punta
+  if (ex.outfit === 'scarf') {
+    const t = 0.3;
+    const cx = neckAx + (neckBx - neckAx) * t, cy = neckAy + (neckBy - neckAy) * t;
+    drawScarfSide(ctx, cx, cy, O);
+  }
+
   // --- Oreja
   {
     const rx = p.headX - 9, ry = p.headY - 8;
@@ -275,6 +318,14 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
     }
   }
 
+  // --- "Cejas" de color (negro y fuego)
+  if (pal.points) {
+    ctx.beginPath();
+    ctx.ellipse(p.headX + 6, p.headY - 13, 3.4, 2.3, -0.2, 0, TAU);
+    ctx.fillStyle = pal.points;
+    ctx.fill();
+  }
+
   // --- Nariz
   {
     const [nx, ny] = sn(4.2, -1.6);
@@ -296,9 +347,15 @@ export function drawDog(ctx: Ctx, p: Pose, ex: DrawExtras, pal: Palette = DACHSH
     ctx.strokeStyle = O;
     ctx.stroke();
   }
+
+  // --- Gorro (Navidad o Halloween)
+  if (ex.outfit === 'santa' || ex.outfit === 'witch') {
+    drawHat(ctx, ex.outfit, p.headX - 1, p.headY - 13.5, -0.28, O);
+  }
 }
 
 export interface FrontView {
+  outfit?: OutfitKind;
   /** Tiempo en segundos: mueve patas y cola. */
   t: number;
   eyeOpen: number;
@@ -371,8 +428,8 @@ export function drawDogFront(ctx: Ctx, v: FrontView, pal: Palette = DACHSHUND): 
   const front = (side: number, d: number): Part[] => {
     const fx = side * mix(15, 8, k) + d, fy = mix(88, 97, k);
     return [
-      { path: (c) => capsule(c, side * mix(13, 9, k), 66, 6.5, fx, fy, 5.4), fill: pal.fur },
-      { path: (c) => capsule(c, fx, fy + 2, 5.8, fx, fy + 3, 5.8), fill: pal.fur },
+      { path: (c) => capsule(c, side * mix(13, 9, k), 66, 6.5, fx, fy, 5.4), fill: pal.points ?? pal.fur },
+      { path: (c) => capsule(c, fx, fy + 2, 5.8, fx, fy + 3, 5.8), fill: pal.points ?? pal.fur },
     ];
   };
   group(ctx, front(-1, -kick), O);
@@ -395,12 +452,14 @@ export function drawDogFront(ctx: Ctx, v: FrontView, pal: Palette = DACHSHUND): 
   ctx.stroke();
   ctx.fillStyle = pal.tag;
   ctx.fill();
+  if (v.outfit === 'scarf') drawScarfFront(ctx, O);
 
   // Orejas largas a los lados; al caer se levantan con el aire.
   for (const side of [-1, 1]) {
     const tx = side * mix(29, 40, v.earLift), ty = mix(49, 6, v.earLift);
     group(ctx, [{ path: (c) => capsule(c, side * 20, 19, 5.5, tx, ty, 9.5), fill: pal.furDark }], O);
   }
+  if (v.outfit === 'santa' || v.outfit === 'witch') drawHat(ctx, v.outfit, 0, 12, -0.12, O, 0.95);
 
   // Hocico, nariz y boca.
   ctx.beginPath();
@@ -440,4 +499,128 @@ export function drawDogFront(ctx: Ctx, v: FrontView, pal: Palette = DACHSHUND): 
       ctx.fill();
     }
   }
+}
+
+// ------------------------------------------------------------- disfraces
+
+/**
+ * Gorro con el ala centrada en (x, y), inclinado `tilt` radianes.
+ * Navidad: rojo con borde blanco y pompón. Halloween: sombrero de bruja.
+ */
+export function drawHat(ctx: Ctx, kind: 'santa' | 'witch', x: number, y: number, tilt: number, O: string, size = 1): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(tilt);
+  ctx.scale(size, size);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = OUTLINE_W * 1.6;
+  ctx.strokeStyle = O;
+  if (kind === 'santa') {
+    // Cono que cae hacia atrás.
+    ctx.beginPath();
+    ctx.moveTo(-15, 0);
+    ctx.quadraticCurveTo(-12, -22, -2, -30);
+    ctx.quadraticCurveTo(-18, -30, -30, -18);
+    ctx.quadraticCurveTo(-4, -26, 15, 0);
+    ctx.closePath();
+    ctx.moveTo(-15, 0);
+    ctx.bezierCurveTo(-14, -20, 2, -34, 10, -30);
+    ctx.quadraticCurveTo(14, -14, 15, 0);
+    ctx.closePath();
+    ctx.fillStyle = '#D6322C';
+    ctx.stroke();
+    ctx.fill();
+    // Punta caída con pompón.
+    ctx.beginPath();
+    ctx.moveTo(4, -31);
+    ctx.quadraticCurveTo(-14, -36, -24, -22);
+    ctx.lineWidth = 9 + OUTLINE_W * 1.6;
+    ctx.stroke();
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = '#D6322C';
+    ctx.stroke();
+    ctx.lineWidth = OUTLINE_W * 1.6;
+    ctx.strokeStyle = O;
+    ctx.beginPath();
+    ctx.arc(-25, -20, 5.5, 0, TAU);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.stroke();
+    ctx.fill();
+    // Borde de piel.
+    ctx.beginPath();
+    capsule(ctx, -17, 0, 5, 17, 0, 5);
+    ctx.stroke();
+    ctx.fill();
+  } else {
+    // Ala.
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 25, 5.5, 0, 0, TAU);
+    ctx.fillStyle = '#3B2A55';
+    ctx.stroke();
+    ctx.fill();
+    // Copa con la punta doblada.
+    ctx.beginPath();
+    ctx.moveTo(-12, 0);
+    ctx.lineTo(-5, -26);
+    ctx.quadraticCurveTo(-4, -36, -14, -40);
+    ctx.quadraticCurveTo(0, -38, 2, -27);
+    ctx.lineTo(12, 0);
+    ctx.closePath();
+    ctx.fillStyle = '#4B3670';
+    ctx.stroke();
+    ctx.fill();
+    // Cinta.
+    ctx.beginPath();
+    ctx.moveTo(-11, -4);
+    ctx.lineTo(11, -4);
+    ctx.lineWidth = 4.5;
+    ctx.strokeStyle = '#F28C28';
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+const SCARF = '#D93A3A';
+const SCARF_STRIPE = '#FFF4DC';
+
+function scarfStroke(ctx: Ctx, O: string, path: () => void, width: number): void {
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  path();
+  ctx.lineWidth = width + OUTLINE_W * 1.6;
+  ctx.strokeStyle = O;
+  ctx.stroke();
+  ctx.lineWidth = width;
+  ctx.strokeStyle = SCARF;
+  ctx.stroke();
+  ctx.setLineDash([3, 5]);
+  ctx.lineWidth = width * 0.75;
+  ctx.strokeStyle = SCARF_STRIPE;
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/** Bufanda de lado: vuelta al cuello y una punta que cuelga por el pecho. */
+function drawScarfSide(ctx: Ctx, cx: number, cy: number, O: string): void {
+  scarfStroke(ctx, O, () => {
+    ctx.moveTo(cx + 8, cy + 6);
+    ctx.quadraticCurveTo(cx + 12, cy + 18, cx + 9, cy + 27);
+  }, 6.5);
+  scarfStroke(ctx, O, () => {
+    ctx.moveTo(cx - 11, cy - 9);
+    ctx.quadraticCurveTo(cx, cy + 2, cx + 12, cy + 9);
+  }, 9);
+}
+
+/** Bufanda de frente. */
+function drawScarfFront(ctx: Ctx, O: string): void {
+  scarfStroke(ctx, O, () => {
+    ctx.moveTo(8, 56);
+    ctx.quadraticCurveTo(13, 68, 10, 80);
+  }, 7);
+  scarfStroke(ctx, O, () => {
+    ctx.moveTo(-15, 52);
+    ctx.quadraticCurveTo(0, 60, 15, 52);
+  }, 9);
 }

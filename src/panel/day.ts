@@ -15,6 +15,7 @@ interface DayView {
   mood: { joy: number; food: number; joyLabel: string; foodLabel: string };
   meetings: { title: string; start: number }[] | null;
   taskNudges: boolean;
+  achievements: { id: string; icon: string; title: string; hint: string; goal: number; progress: number; unlocked: boolean }[];
 }
 
 const hm = (sec: number): string => {
@@ -92,6 +93,20 @@ function render(v: DayView): void {
     return el('div', { className: 'meter' }, el('span', { textContent: label }), track, el('span', { className: 'muted', textContent: text }));
   };
   $('mood').replaceChildren(meter('Ánimo', v.mood.joy, v.mood.joyLabel), meter('Comida', v.mood.food, v.mood.foodLabel));
+
+  const got = v.achievements.filter((a) => a.unlocked).length;
+  $('medals').replaceChildren(
+    ...[...v.achievements].sort((a, b) => Number(b.unlocked) - Number(a.unlocked)).map((a) => {
+      const progress = !a.unlocked && a.goal > 1 ? ` (${a.progress}/${a.goal})` : '';
+      const li = el('li', { className: a.unlocked ? '' : 'locked', title: a.hint + progress },
+        el('span', { className: 'icon', textContent: a.icon }),
+        el('b', { textContent: a.title }),
+        el('span', { textContent: a.unlocked ? a.hint : `${a.hint}${progress}` }));
+      li.setAttribute('aria-label', `${a.title}: ${a.unlocked ? 'desbloqueado' : 'pendiente'}. ${a.hint}${progress}`);
+      return li;
+    }),
+  );
+  $('ach-count').textContent = `${got} de ${v.achievements.length} desbloqueados.`;
 
   const section = $('meetings-section');
   section.hidden = v.meetings === null;
