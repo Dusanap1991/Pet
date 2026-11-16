@@ -10,6 +10,16 @@ export interface Settings {
   waterEveryMin: number;
   /** macOS: esconderse solo cuando hay una app en pantalla completa. */
   hideOnFullscreen: boolean;
+  /** Nombre del perro ('' = sin nombre). */
+  name: string;
+  sound: boolean;
+  /** Dirección iCal del calendario ('' = sin calendario). */
+  calendarUrl: string;
+  meetingLeadMin: number;
+  /** Carpeta a la que mover archivos soltados sobre el perro ('' = preguntar). */
+  dropFolder: string;
+  deviceAlerts: boolean;
+  taskNudges: boolean;
   /** Pantalla donde vive el perro; sin valor, la principal. */
   displayId?: number;
 }
@@ -21,10 +31,19 @@ export const DEFAULT_SETTINGS: Settings = {
   waterReminders: true,
   waterEveryMin: 45,
   hideOnFullscreen: true,
+  name: '',
+  sound: false,
+  calendarUrl: '',
+  meetingLeadMin: 5,
+  dropFolder: '',
+  deviceAlerts: true,
+  taskNudges: true,
 };
 
 export const BREAK_CHOICES = [30, 50, 90] as const;
 export const WATER_CHOICES = [30, 45, 60, 90] as const;
+export const MEETING_LEAD_CHOICES = [1, 5, 10, 15] as const;
+export const MAX_NAME = 24;
 
 /** Acepta cualquier cosa leída del disco y devuelve una configuración válida. */
 export function sanitizeSettings(raw: unknown): Settings {
@@ -41,6 +60,15 @@ export function sanitizeSettings(raw: unknown): Settings {
     out.waterEveryMin = Math.round(r.waterEveryMin);
   }
   if (typeof r.hideOnFullscreen === 'boolean') out.hideOnFullscreen = r.hideOnFullscreen;
+  if (typeof r.name === 'string') out.name = r.name.replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
+  if (typeof r.sound === 'boolean') out.sound = r.sound;
+  if (typeof r.calendarUrl === 'string' && r.calendarUrl.length <= 2000) out.calendarUrl = r.calendarUrl.trim();
+  if (typeof r.meetingLeadMin === 'number' && (MEETING_LEAD_CHOICES as readonly number[]).includes(r.meetingLeadMin)) {
+    out.meetingLeadMin = r.meetingLeadMin;
+  }
+  if (typeof r.dropFolder === 'string' && (r.dropFolder === '' || path.isAbsolute(r.dropFolder))) out.dropFolder = r.dropFolder;
+  if (typeof r.deviceAlerts === 'boolean') out.deviceAlerts = r.deviceAlerts;
+  if (typeof r.taskNudges === 'boolean') out.taskNudges = r.taskNudges;
   if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;
 }

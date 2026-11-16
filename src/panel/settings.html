@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ajustes</title>
+    <link rel="stylesheet" href="panel.css" />
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Ajustes</h1>
+
+      <section>
+        <h2>El perro</h2>
+        <label class="field">
+          <span>Nombre</span>
+          <input id="name" type="text" maxlength="24" placeholder="Ponle un nombre" />
+        </label>
+        <label class="check">
+          <input id="sound" type="checkbox" />
+          <span>Ladridos con sonido</span>
+        </label>
+      </section>
+
+      <section>
+        <h2>Avisos</h2>
+        <label class="check">
+          <input id="taskNudges" type="checkbox" />
+          <span>Recordarme las tareas pendientes</span>
+        </label>
+        <label class="check">
+          <input id="deviceAlerts" type="checkbox" />
+          <span>Avisarme de batería baja, internet caído y cuando convenga reiniciar</span>
+        </label>
+      </section>
+
+      <section>
+        <h2>Reuniones</h2>
+        <label class="field">
+          <span>Dirección iCal de tu calendario</span>
+          <div class="row">
+            <input id="calendarUrl" class="grow" type="url" placeholder="https://… .ics" spellcheck="false" />
+            <button type="button" id="test">Probar</button>
+          </div>
+        </label>
+        <p class="status" id="calendar-status" role="status"></p>
+        <label class="field inline">
+          <span>Avisarme</span>
+          <select id="meetingLeadMin">
+            <option value="1">1 minuto antes</option>
+            <option value="5">5 minutos antes</option>
+            <option value="10">10 minutos antes</option>
+            <option value="15">15 minutos antes</option>
+          </select>
+        </label>
+        <details>
+          <summary>¿Dónde encuentro esa dirección?</summary>
+          <p><b>Outlook</b>: Configuración → Calendario → Calendarios compartidos → Publicar un calendario. Elige tu calendario y "Puede ver todos los detalles", pulsa Publicar y copia el vínculo ICS.</p>
+          <p><b>Google Calendar</b>: Configuración → tu calendario → Integrar el calendario → "Dirección secreta en formato iCal".</p>
+          <p>Es una dirección privada: quien la tenga puede ver tu calendario. Queda guardada solo en este equipo.</p>
+        </details>
+      </section>
+
+      <section>
+        <h2>Archivos</h2>
+        <p class="hint first">Suelta archivos sobre el perro para moverlos a una carpeta o a la papelera.</p>
+        <div class="row">
+          <span class="grow path" id="dropFolder">Sin carpeta: te pregunto cada vez</span>
+          <button type="button" id="choose">Elegir carpeta…</button>
+          <button type="button" id="clearFolder" class="icon" title="Quitar carpeta" aria-label="Quitar carpeta">×</button>
+        </div>
+      </section>
+    </main>
+    <script src="settings.js"></script>
+  </body>
+</html>

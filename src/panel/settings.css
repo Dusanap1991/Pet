@@ -1,0 +1,63 @@
+section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+section h2 {
+  margin-bottom: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.check input {
+  margin-top: 2px;
+}
+
+.status {
+  margin: -6px 0 0;
+}
+
+details {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+details summary {
+  cursor: pointer;
+  color: var(--fg);
+}
+
+details p {
+  margin: 8px 0 0;
+}
+
+.hint.first {
+  margin: 0;
+}
+
+.path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  color: var(--muted);
+}

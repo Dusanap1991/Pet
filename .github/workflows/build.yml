@@ -50,6 +50,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # La versión sube sola en cada publicación: 0.1.<número de compilación>.
+      - run: npm version "0.1.${{ github.run_number }}" --no-git-tag-version --allow-same-version
       - run: npm run dist
         env:
           PET_BUILD: ${{ github.run_number }}
@@ -75,6 +77,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm version "0.1.${{ github.run_number }}" --no-git-tag-version --allow-same-version
       - name: Paquete de actualización
         env:
           PET_BUILD: ${{ github.run_number }}
@@ -91,6 +94,16 @@ jobs:
           gh release create "$TAG" installers/*
           --repo "${{ github.repository }}"
           --target "${{ github.sha }}"
-          --title "Pet (compilación ${{ github.run_number }})"
+          --title "Pet 0.1.${{ github.run_number }}"
           --notes "Instaladores sin firmar. Mac con procesador M: archivo arm64.dmg. Windows: archivo .exe. Si ya tienes Pet instalado no hace falta bajar nada: se actualiza solo."
           --latest
+      # Deja solo las 3 publicaciones más recientes. Las apps instaladas solo miran la última.
+      - name: Borrar publicaciones antiguas
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "${{ github.repository }}" --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[3:] | .[].tagName' |
+          while read -r tag; do
+            gh release delete "$tag" --repo "${{ github.repository }}" --yes --cleanup-tag
+          done

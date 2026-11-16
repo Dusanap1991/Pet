@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mi día</title>
+    <link rel="stylesheet" href="panel.css" />
+    <link rel="stylesheet" href="day.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 id="title">Mi día</h1>
+        <p class="sub" id="date"></p>
+      </header>
+
+      <section aria-labelledby="tasks-h">
+        <h2 id="tasks-h">Tareas</h2>
+        <form id="add" class="row" autocomplete="off">
+          <input id="new" class="grow" type="text" maxlength="120" placeholder="Agregar una tarea…" aria-label="Nueva tarea" />
+          <button class="primary" type="submit">Agregar</button>
+        </form>
+        <ul id="tasks" class="tasks"></ul>
+        <p class="hint" id="tasks-hint"></p>
+      </section>
+
+      <section aria-labelledby="today-h">
+        <h2 id="today-h">Hoy</h2>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <section aria-labelledby="week-h">
+        <h2 id="week-h">Últimos 7 días</h2>
+        <div class="week" id="week"></div>
+        <p class="hint" id="streak"></p>
+      </section>
+
+      <section aria-labelledby="mood-h">
+        <h2 id="mood-h">Cómo está</h2>
+        <div class="meters" id="mood"></div>
+      </section>
+
+      <section aria-labelledby="meet-h" id="meetings-section" hidden>
+        <h2 id="meet-h">Reuniones de hoy</h2>
+        <ul id="meetings" class="meetings"></ul>
+      </section>
+    </main>
+    <script src="day.js"></script>
+  </body>
+</html>

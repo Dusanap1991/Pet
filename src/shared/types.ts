@@ -14,7 +14,12 @@ export type PetEvent =
   | { type: 'water' }
   | { type: 'reminder'; text: string }
   | { type: 'notice'; text: string }
-  | { type: 'settings'; size: PetSize };
+  | { type: 'settings'; size: PetSize; sound: boolean; name: string }
+  | { type: 'mood'; joy: number; food: number }
+  | { type: 'ball'; out: boolean };
+
+/** Lo que el perro le cuenta al proceso principal (para el resumen del día y el ánimo). */
+export type PetReport = 'pet' | 'treat' | 'play' | 'drank';
 
 /** API que el preload expone en `window.pet`. */
 export interface PetBridge {
@@ -25,6 +30,8 @@ export interface PetBridge {
   setDragging(on: boolean): void;
   /** Clic derecho sobre el perro: abre su menú. */
   showMenu(): void;
+  report(kind: PetReport): void;
+  battery(level: number, charging: boolean): void;
   ready(): void;
 }
 

@@ -17,6 +17,7 @@ body {
 
 #dog,
 .treat,
+.ball,
 .bubble {
   position: absolute;
   left: 0;
@@ -31,6 +32,17 @@ body {
 .treat {
   pointer-events: none;
   line-height: 0;
+}
+
+.ball {
+  pointer-events: none;
+  line-height: 0;
+}
+
+.ball svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .treat svg {

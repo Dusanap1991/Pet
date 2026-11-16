@@ -36,9 +36,14 @@ export function setupDemo(emit: (e: PetEvent) => void): void {
   add('Recordatorio', () => emit({ type: 'reminder', text: 'Llamar a Ana' }));
   add('Empezar foco', () => emit({ type: 'focus-start', minutes: 25 }));
   add('Terminar foco', () => emit({ type: 'focus-end', completed: true, minutes: 25 }));
-  add('Chico', () => emit({ type: 'settings', size: 's' }));
-  add('Mediano', () => emit({ type: 'settings', size: 'm' }));
-  add('Grande', () => emit({ type: 'settings', size: 'l' }));
+  let ball = false;
+  add('Pelota', () => emit({ type: 'ball', out: (ball = !ball) }));
+  add('Triste', () => emit({ type: 'mood', joy: 10, food: 10 }));
+  add('Feliz', () => emit({ type: 'mood', joy: 90, food: 90 }));
+  add('Tareas', () => emit({ type: 'notice', text: '¡Buen día! Para hoy tienes 2:\n• Enviar informe\n• Llamar a Ana' }));
+  add('Chico', () => emit({ type: 'settings', size: 's', sound: false, name: '' }));
+  add('Mediano', () => emit({ type: 'settings', size: 'm', sound: false, name: '' }));
+  add('Grande', () => emit({ type: 'settings', size: 'l', sound: false, name: '' }));
   add('Fondo claro/oscuro', () => document.body.classList.toggle('dark'));
 
   document.body.appendChild(panel);

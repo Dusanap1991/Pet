@@ -1,8 +1,10 @@
-import { SIZE_SCALE, type PetBridge, type PetEvent, type PetSize } from '../shared/types';
+import { SIZE_SCALE, type PetBridge, type PetEvent, type PetReport, type PetSize } from '../shared/types';
+import { Ball } from './ball';
 import { Bubble } from './bubble';
 import { DEMO_TASKBAR, setupDemo } from './demo';
 import { Dog, type World } from './dog/dog';
 import { Fx } from './fx';
+import { bark } from './sound';
 import { STR } from './strings';
 import { Treats } from './treats';
 
@@ -10,7 +12,7 @@ declare global {
   interface Window {
     pet?: PetBridge;
     /** Solo en la vista previa: acceso para pruebas. */
-    __pet?: { dog: Dog; emit: (e: PetEvent) => void };
+    __pet?: { dog: Dog; emit: (e: PetEvent) => void; ball: () => Ball | null; reports: PetReport[] };
   }
 }
 
@@ -32,14 +34,37 @@ const bubble = new Bubble(stage);
 
 let scale = SIZE_SCALE.m;
 let dpr = 1;
+let soundOn = false;
+let ball: Ball | null = null;
+/** Cuándo fue el último aviso de agua: un clic en el perro poco después cuenta como "ya tomé". */
+let waterAskedAt = 0;
+const reports: PetReport[] = [];
+
+function report(kind: PetReport): void {
+  if (demo) reports.push(kind);
+  bridge?.report(kind);
+}
 
 const world: World = { width: 0, floorY: 0, cursorX: -9999, cursorY: -9999, cursorKnown: false };
 
 const dog = new Dog(scale, fx, {
   say: (text, ms) => bubble.say(text, ms),
   nearestTreat: (x) => treats.nearest(x),
-  eatTreat: (t) => treats.remove(t),
+  eatTreat: (t) => {
+    treats.remove(t);
+    report('treat');
+  },
+  ball: () => ball,
+  carryBall: (x, y) => ball?.carry(x, y),
+  dropBall: (vx) => ball?.drop(vx),
+  played: () => report('play'),
 });
+
+/** Ladra (si el sonido está activado) y muestra el mensaje. */
+function remind(text: string, ms?: number): void {
+  dog.remind(text, ms);
+  if (soundOn) bark(3);
+}
 
 function measure(): void {
   world.width = window.innerWidth;
@@ -76,7 +101,7 @@ function handle(e: PetEvent): void {
       dog.onBack(e.awaySec, STR.welcomeBack);
       break;
     case 'break-due':
-      dog.remind(STR.breakDue(e.minutes));
+      remind(STR.breakDue(e.minutes));
       break;
     case 'focus-start':
       dog.focusStart(STR.focusStart(e.minutes));
@@ -88,20 +113,36 @@ function handle(e: PetEvent): void {
       dropTreat();
       break;
     case 'water': {
-      dog.remind(STR.water[Math.floor(Math.random() * STR.water.length)], 8000);
+      remind(STR.water[Math.floor(Math.random() * STR.water.length)], 8000);
+      waterAskedAt = performance.now();
       const head = dog.headOffset();
       for (let i = 0; i < 4; i++) fx.drop(head.x, head.y - 30 * scale, scale, i * 0.18);
       break;
     }
     case 'reminder':
       // Se queda hasta que hagas clic en el perro (o un minuto).
-      dog.remind(`⏰ ${e.text}`, 60_000);
+      remind(e.text.startsWith('📅') || e.text.startsWith('🔋') ? e.text : `⏰ ${e.text}`, 60_000);
       break;
     case 'notice':
-      dog.remind(e.text);
+      dog.remind(e.text, e.text.includes('\n') ? 12_000 : 9000);
       break;
     case 'settings':
       setSize(e.size);
+      soundOn = e.sound;
+      break;
+    case 'mood':
+      dog.setMood(e.joy, e.food);
+      break;
+    case 'ball':
+      if (e.out && !ball) {
+        // Cae desde arriba, lejos del perro, para que corra a buscarla.
+        const x = dog.x < world.width / 2 ? world.width * 0.75 : world.width * 0.25;
+        ball = new Ball(stage, x, 40, scale);
+        ball.vx = (Math.random() - 0.5) * 300;
+      } else if (!e.out && ball) {
+        ball.remove();
+        ball = null;
+      }
       break;
   }
 }
@@ -123,6 +164,7 @@ function dropTreat(): void {
 
 let pressing = false;
 let dragging = false;
+let holdingBall = false;
 let pressX = 0;
 let pressY = 0;
 let interactive = false;
@@ -139,6 +181,7 @@ function setCursor(x: number, y: number): void {
 
 window.addEventListener('pointermove', (e) => {
   setCursor(e.clientX, e.clientY);
+  if (holdingBall && ball) ball.dragTo(e.clientX, e.clientY, world.floorY);
   if (pressing && !dragging && Math.hypot(e.clientX - pressX, e.clientY - pressY) > 6) {
     dragging = true;
     dog.grab(pressX, pressY);
@@ -148,6 +191,15 @@ window.addEventListener('pointermove', (e) => {
 
 window.addEventListener('pointerdown', (e) => {
   setCursor(e.clientX, e.clientY);
+  if (e.button === 0 && ball && ball.hitTest(e.clientX, e.clientY)) {
+    // La pelota va primero: aunque la tenga el perro en la boca, se la puedes quitar.
+    holdingBall = true;
+    ball.grab();
+    ball.dragTo(e.clientX, e.clientY, world.floorY);
+    bridge?.setDragging(true);
+    e.preventDefault();
+    return;
+  }
   if (!dog.hitTest(e.clientX, e.clientY)) return;
   if (e.button === 2) {
     bridge?.showMenu();
@@ -162,6 +214,12 @@ window.addEventListener('pointerdown', (e) => {
 });
 
 function endPress(): void {
+  if (holdingBall) {
+    holdingBall = false;
+    ball?.throw();
+    bridge?.setDragging(false);
+    return;
+  }
   if (!pressing) return;
   if (dragging) {
     dog.release();
@@ -169,6 +227,11 @@ function endPress(): void {
   } else {
     bubble.dismiss();
     dog.pet();
+    report('pet');
+    if (waterAskedAt && performance.now() - waterAskedAt < 120_000) {
+      waterAskedAt = 0;
+      report('drank');
+    }
   }
   pressing = false;
   dragging = false;
@@ -181,13 +244,15 @@ window.addEventListener('blur', endPress);
 
 /** Decide si la ventana debe atrapar clics: solo cuando el cursor está sobre el perro. */
 function updateInteractivity(dt: number): void {
-  const over = world.cursorKnown && dog.hitTest(world.cursorX, world.cursorY);
-  const want = pressing || over;
+  const overDog = world.cursorKnown && dog.hitTest(world.cursorX, world.cursorY);
+  const overBall = world.cursorKnown && !!ball && ball.hitTest(world.cursorX, world.cursorY);
+  const over = overDog || overBall;
+  const want = pressing || holdingBall || over;
   if (want !== interactive) {
     interactive = want;
     bridge?.setInteractive(want);
   }
-  document.body.style.cursor = dragging ? 'grabbing' : over ? 'grab' : '';
+  document.body.style.cursor = dragging || holdingBall ? 'grabbing' : over ? 'grab' : '';
 
   // Pasar el cursor de un lado a otro sobre el perro también cuenta como caricia.
   const moved = Math.hypot(world.cursorX - lastCursorX, world.cursorY - lastCursorY);
@@ -195,12 +260,13 @@ function updateInteractivity(dt: number): void {
   lastCursorY = world.cursorY;
   strokeCooldown = Math.max(0, strokeCooldown - dt);
   strokeAcc = Math.max(0, strokeAcc - 90 * dt);
-  if (over && !pressing && moved < 200) {
+  if (overDog && !pressing && !holdingBall && moved < 200) {
     strokeAcc += moved;
     if (strokeAcc > 240 && strokeCooldown === 0) {
       strokeAcc = 0;
       strokeCooldown = 2.5;
       dog.pet();
+      report('pet');
     }
   }
 }
@@ -214,7 +280,7 @@ function frame(now: number): void {
   const elapsed = (now - last) / 1000;
   // Con el perro quieto no hace falta dibujar a 60 cuadros por segundo.
   // (Las "z" del sueño flotan despacio: no justifican subir el ritmo.)
-  const busy = treats.active || pressing || (fx.active && !dog.sleeping);
+  const busy = treats.active || pressing || holdingBall || (ball?.moving ?? false) || (fx.active && !dog.sleeping);
   const minStep = busy ? 0 : dog.sleeping ? 1 / 15 : dog.calm ? 1 / 30 : 0;
   if (elapsed < minStep - 0.004) return;
   last = now;
@@ -223,6 +289,7 @@ function frame(now: number): void {
   if (dragging) dog.dragTo(world.cursorX, world.cursorY, dt);
   treats.update(dt, world.floorY);
   dog.update(dt, world);
+  ball?.update(dt, world.floorY, world.width);
   fx.update(dt);
   updateInteractivity(dt);
 
@@ -246,12 +313,27 @@ measure();
 sizeCanvas();
 dog.place(world.width * 0.72, world);
 
+// Archivos arrastrados hacia el perro: se pone atento. (El soltado lo maneja el preload.)
+window.addEventListener('dragenter', () => dog.curious());
+
+/** Batería: el proceso principal decide cuándo avisar. */
+function watchBattery(): void {
+  const nav = navigator as Navigator & { getBattery?: () => Promise<{ level: number; charging: boolean; addEventListener(t: string, f: () => void): void }> };
+  void nav.getBattery?.().then((b) => {
+    const send = (): void => bridge?.battery(b.level, b.charging);
+    send();
+    b.addEventListener('levelchange', send);
+    b.addEventListener('chargingchange', send);
+  }).catch(() => {});
+}
+
 if (bridge) {
   bridge.onEvent(handle);
   bridge.ready();
+  watchBattery();
 } else {
   setupDemo(handle);
-  window.__pet = { dog, emit: handle };
+  window.__pet = { dog, emit: handle, ball: () => ball, reports };
 }
 
 requestAnimationFrame(frame);

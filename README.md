@@ -24,6 +24,17 @@ Para Windows y macOS.
   guardan aunque cierres la app.
 - **Se esconde cuando estorba**: lo ocultas por 30 minutos, 1 o 2 horas y vuelve
   solo. En macOS se esconde además cuando hay una app en pantalla completa.
+- **Mi día**: tareas del día (las pendientes pasan al siguiente y te las recuerda
+  al llegar y cada 2 horas), un resumen de lo que hiciste hoy (tiempo frente al
+  equipo, pausas, foco, vasos de agua, tareas) y los últimos 7 días con tu racha.
+- **Reuniones**: con la dirección iCal de tu calendario de Outlook o Google te
+  avisa unos minutos antes de cada reunión.
+- **Estado del equipo**: avisa con batería baja, cuando se cae internet y cuando
+  el equipo lleva una semana sin reiniciarse.
+- **Suelta archivos sobre él** y los lleva a una carpeta o a la papelera.
+- **Tiene su personalidad**: ponle nombre en Ajustes, juega a la pelota con él
+  (lánzala con el mouse y te la trae), y cuídalo: se pone triste si no le haces
+  caso y pide comida si no le das premios. Los ladridos con sonido son opcionales.
 - **Sesiones de foco**: elige 15, 25 o 45 minutos; se queda echado y tranquilo, y
   ladra cuando se cumple el tiempo.
 
@@ -39,12 +50,17 @@ sobre el perro). No registra teclas, no pide permisos de accesibilidad ni de
 grabación de pantalla. En macOS, para saber si hay algo en pantalla completa, mira
 la posición y el tamaño de las ventanas abiertas, nunca su contenido ni su título.
 Solo se conecta a internet para consultar en GitHub si hay
-una versión nueva.
+una versión nueva y, si lo configuras, para leer tu calendario. La dirección del
+calendario, tus tareas y el resumen del día quedan guardados solo en tu equipo.
+Los archivos que sueltas sobre el perro solo se mueven cuando eliges adónde.
 
 ## Instalar
 
-Descarga el instalador desde la [última release](https://github.com/Dusanap1991/Pet/releases/latest):
-`arm64.dmg` para Mac con Apple silicon, `x64.dmg` para Mac Intel o `.exe` para Windows.
+Descarga el instalador de la [última versión](https://github.com/Dusanap1991/Pet/releases/latest):
+
+- Mac con procesador M: [Pet-mac-arm64.dmg](https://github.com/Dusanap1991/Pet/releases/latest/download/Pet-mac-arm64.dmg)
+- Mac con Intel: [Pet-mac-x64.dmg](https://github.com/Dusanap1991/Pet/releases/latest/download/Pet-mac-x64.dmg)
+- Windows: [Pet-win-x64.exe](https://github.com/Dusanap1991/Pet/releases/latest/download/Pet-win-x64.exe)
 
 Los instaladores no están firmados, así que el sistema avisa la primera vez:
 
@@ -63,7 +79,9 @@ Solo hay que volver a instalar si cambia la base de la app (la versión de
 Electron o `src/main/boot.ts`); en ese caso se sube `SHELL_VERSION` en
 `src/main/updater.ts` y las apps antiguas ignoran las actualizaciones nuevas.
 
-Para publicar una versión: pestaña **Actions** → **Build** → **Run workflow**.
+Para publicar una versión: pestaña **Actions** → **Build** → **Run workflow**. La
+versión sube sola (0.1.N, con N el número de la ejecución) y se conservan solo las
+3 publicaciones más recientes.
 
 ## Desarrollo
 

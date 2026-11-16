@@ -1,12 +1,14 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   nativeImage,
   net,
   powerMonitor,
   screen,
+  shell,
   Tray,
   type IpcMainEvent,
   type MenuItemConstructorOptions,
@@ -14,17 +16,26 @@ import {
   type Rectangle,
 } from 'electron';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
-import type { PetEvent, PetSize } from '../shared/types';
+import type { PetEvent, PetReport, PetSize } from '../shared/types';
 import { ActivityTracker } from './activity';
 import { FocusSession } from './focus';
+import { MeetingAlerts, normalizeCalendarUrl, parseCalendar, type Meeting } from './calendar';
+import { DeviceMonitor, type DeviceAlert } from './device';
+import { cleanPaths, moveFiles } from './files';
 import { isFullscreen, watchWindows, type WindowRect } from './fullscreen';
+import { Mood, foodLabel, joyLabel } from './mood';
 import { ReminderStore, parseRequest } from './reminders';
+import { StatsStore } from './stats';
+import { TaskNudger, TaskStore } from './tasks';
 import { checkForUpdate } from './updater';
 import { WaterReminder } from './water';
-import { BREAK_CHOICES, WATER_CHOICES, loadSettings, saveSettings, type Settings } from './settings';
+import { BREAK_CHOICES, WATER_CHOICES, loadSettings, sanitizeSettings, saveSettings, type Settings } from './settings';
+import { dayKey } from './store';
 
 declare const __PET_BUILD__: number;
+declare const __PET_VERSION__: string;
 
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
@@ -36,6 +47,8 @@ const SIZES: [PetSize, string][] = [['s', 'Chico'], ['m', 'Mediano'], ['l', 'Gra
 /** Cada cuánto se mira dónde está el cursor para saber si está sobre el perro. */
 const CURSOR_POLL_MS = 33;
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
+const CALENDAR_REFRESH_MS = 10 * 60 * 1000;
+const HUNGER_NUDGE_MS = 90 * 60 * 1000;
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -68,6 +81,23 @@ let fullscreenClear: NodeJS.Timeout | undefined;
 let lastWindows: WindowRect[] = [];
 /** Avisos que llegaron mientras estaba escondido por pantalla completa; se entregan al volver. */
 let held: PetEvent[] = [];
+
+let stats: StatsStore;
+let tasks: TaskStore;
+let mood: Mood;
+const nudger = new TaskNudger();
+const device = new DeviceMonitor();
+const meetingAlerts = new MeetingAlerts();
+let meetings: Meeting[] = [];
+let calendarFetchedAt = 0;
+let battery: { level: number; charging: boolean } | null = null;
+let lastWaterAt = 0;
+let lastHungerNudge = 0;
+let lastPlayReport = 0;
+let lastMoodSent = '';
+let currentDay = '';
+let ballOut = false;
+const panels: Partial<Record<'day' | 'settings', BrowserWindow>> = {};
 
 // ------------------------------------------------------------- ventana
 
@@ -131,6 +161,8 @@ function createWindow(): void {
       sandbox: true,
       nodeIntegration: false,
       backgroundThrottling: false,
+      // Los ladridos suenan sin que tengas que hacer clic antes.
+      autoplayPolicy: 'no-user-gesture-required',
       devTools: !app.isPackaged,
     },
   });
@@ -341,11 +373,307 @@ function restartToUpdate(): void {
 
 function updateMenu(): MenuItemConstructorOptions[] {
   const items: MenuItemConstructorOptions[] = [
-    { label: `Versión ${app.getVersion()} (compilación ${__PET_BUILD__})`, enabled: false },
+    { label: `Versión ${__PET_VERSION__}`, enabled: false },
   ];
   if (updateReady) items.push({ label: `Reiniciar para actualizar (compilación ${updateReady})`, click: restartToUpdate });
   else if (app.isPackaged) items.push({ label: 'Buscar actualizaciones', click: () => void lookForUpdate(true) });
   return items;
+}
+
+// ------------------------------------------------------------ paneles
+
+function openPanel(kind: 'day' | 'settings'): void {
+  const existing = panels[kind];
+  if (existing && !existing.isDestroyed()) {
+    existing.show();
+    existing.focus();
+    return;
+  }
+  const w = new BrowserWindow({
+    width: kind === 'day' ? 460 : 480,
+    height: kind === 'day' ? 760 : 700,
+    minWidth: 380,
+    minHeight: 420,
+    title: kind === 'day' ? 'Mi día' : 'Ajustes',
+    show: false,
+    autoHideMenuBar: true,
+    fullscreenable: false,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/panel.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      devTools: !app.isPackaged,
+    },
+  });
+  panels[kind] = w;
+  w.setMenuBarVisibility(false);
+  w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  w.webContents.on('will-navigate', (event) => event.preventDefault());
+  w.once('ready-to-show', () => {
+    w.show();
+    if (isMac) app.focus({ steal: true });
+    w.focus();
+  });
+  w.on('closed', () => {
+    if (panels[kind] === w) delete panels[kind];
+  });
+  void w.loadFile(path.join(__dirname, `../panel/${kind}.html`));
+}
+
+function panelOf(event: Electron.IpcMainInvokeEvent | IpcMainEvent): 'day' | 'settings' | null {
+  for (const kind of ['day', 'settings'] as const) {
+    const w = panels[kind];
+    if (w && !w.isDestroyed() && event.sender === w.webContents) return kind;
+  }
+  return null;
+}
+
+function dayView(): unknown {
+  const now = Date.now();
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  return {
+    name: settings.name,
+    tasks: tasks.list,
+    today: stats.today(now),
+    week: stats.history(now, 7).map((d) => ({ day: d.day, activeSec: d.stats.activeSec })),
+    streak: stats.streak(now),
+    mood: { ...mood.state, joyLabel: joyLabel(mood.state.joy), foodLabel: foodLabel(mood.state.food) },
+    meetings: settings.calendarUrl
+      ? meetings.filter((m) => m.end > now - 30 * 60_000 && m.start <= end.getTime()).map((m) => ({ title: m.title, start: m.start }))
+      : null,
+    taskNudges: settings.taskNudges,
+  };
+}
+
+function registerPanelHandlers(): void {
+  const handle = (channel: string, kinds: ('day' | 'settings')[], fn: (payload: unknown) => unknown): void => {
+    ipcMain.handle(channel, (event, payload: unknown) => {
+      const kind = panelOf(event);
+      if (!kind || !kinds.includes(kind)) throw new Error('No permitido');
+      return fn(payload);
+    });
+  };
+
+  handle('day:get', ['day'], () => dayView());
+  handle('task:add', ['day'], (text) => {
+    if (typeof text !== 'string') return null;
+    const task = tasks.add(text, Date.now());
+    if (task) nudger.postpone(Date.now());
+    refreshTray();
+    return task;
+  });
+  handle('task:toggle', ['day'], (id) => {
+    if (typeof id !== 'string') return null;
+    const done = tasks.toggle(id, Date.now());
+    if (done === true) {
+      stats.add(Date.now(), 'tasksDone');
+      mood.apply('task');
+      nudger.postpone(Date.now());
+      const left = tasks.pending.length;
+      send({ type: 'notice', text: left === 0 ? '¡Terminaste todo! 🎉' : `¡Una menos! Quedan ${left}.` });
+    } else if (done === false) {
+      stats.add(Date.now(), 'tasksDone', -1);
+    }
+    refreshTray();
+    return done;
+  });
+  handle('task:remove', ['day'], (id) => {
+    if (typeof id === 'string') tasks.remove(id);
+    refreshTray();
+    return true;
+  });
+
+  handle('settings:get', ['settings'], () => ({
+    name: settings.name,
+    sound: settings.sound,
+    calendarUrl: settings.calendarUrl,
+    meetingLeadMin: settings.meetingLeadMin,
+    dropFolder: settings.dropFolder,
+    deviceAlerts: settings.deviceAlerts,
+    taskNudges: settings.taskNudges,
+  }));
+  handle('settings:set', ['settings'], (patch) => {
+    if (typeof patch !== 'object' || patch === null) return false;
+    const allowed = ['name', 'sound', 'calendarUrl', 'meetingLeadMin', 'dropFolder', 'deviceAlerts', 'taskNudges'];
+    const picked = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
+    const next = sanitizeSettings({ ...settings, ...picked });
+    const renamed = next.name !== settings.name;
+    const calendarChanged = next.calendarUrl !== settings.calendarUrl;
+    updateSettings(next);
+    if (renamed && next.name) send({ type: 'notice', text: `¡Me encanta! Ahora me llamo ${next.name}.` });
+    if (calendarChanged) {
+      meetings = [];
+      calendarFetchedAt = 0;
+      void refreshCalendar();
+    }
+    return true;
+  });
+  handle('calendar:test', ['settings'], async (raw) => {
+    const url = normalizeCalendarUrl(typeof raw === 'string' ? raw : '');
+    if (!url) return { ok: false, message: 'La dirección tiene que empezar con https:// o webcal://.' };
+    try {
+      const now = Date.now();
+      const found = parseCalendar(await fetchCalendar(url), now, now + 7 * 86_400_000);
+      const today = found.filter((m) => dayKey(m.start) === dayKey(now)).length;
+      return { ok: true, message: `Funciona: ${found.length} reunion${found.length === 1 ? '' : 'es'} en los próximos 7 días (${today} hoy).` };
+    } catch (err) {
+      return { ok: false, message: `No pude leer el calendario: ${(err as Error).message}` };
+    }
+  });
+  handle('folder:choose', ['settings'], async () => {
+    const owner = panels.settings;
+    const options: Electron.OpenDialogOptions = { title: 'Carpeta para los archivos que sueltes sobre el perro', properties: ['openDirectory', 'createDirectory'] };
+    const r = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+    if (!r.canceled && r.filePaths[0]) updateSettings({ dropFolder: r.filePaths[0] });
+    return settings.dropFolder;
+  });
+
+  ipcMain.on('panel:close', (event) => {
+    const kind = panelOf(event);
+    if (kind) panels[kind]?.close();
+  });
+}
+
+// ------------------------------------------------------------ calendario
+
+async function fetchCalendar(url: string): Promise<string> {
+  const res = await net.fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(res.status === 404 ? 'la dirección no existe (404)' : `respuesta ${res.status}`);
+  const text = await res.text();
+  if (text.length > 10_000_000) throw new Error('el calendario es demasiado grande');
+  if (!text.includes('BEGIN:VCALENDAR')) throw new Error('eso no parece un calendario iCal');
+  return text;
+}
+
+async function refreshCalendar(): Promise<void> {
+  const url = normalizeCalendarUrl(settings.calendarUrl);
+  if (!url) {
+    meetings = [];
+    return;
+  }
+  calendarFetchedAt = Date.now();
+  try {
+    const now = Date.now();
+    meetings = parseCalendar(await fetchCalendar(url), now - 3600_000, now + 36 * 3600_000);
+    dayChanged();
+  } catch (err) {
+    // Sin conexión o calendario caído: se conservan las reuniones que ya tenía.
+    console.error('No se pudo leer el calendario:', err);
+  }
+}
+
+function meetingText(m: Meeting): string {
+  const mins = Math.round((m.start - Date.now()) / 60_000);
+  return mins <= 0 ? `📅 Empieza ahora: ${m.title}` : `📅 En ${mins} min: ${m.title}`;
+}
+
+// -------------------------------------------------------------- archivos
+
+function moveDropped(paths: string[], dir: string): void {
+  try {
+    const r = moveFiles(paths, dir);
+    const where = path.basename(dir) || dir;
+    const skipped = r.skipped.length ? ` (no pude mover ${r.skipped.length})` : '';
+    send({ type: 'notice', text: r.moved ? `Listo, dejé ${r.moved} en "${where}"${skipped}.` : `No moví nada${skipped}.` });
+  } catch (err) {
+    send({ type: 'notice', text: `No pude mover los archivos: ${(err as Error).message}` });
+  }
+}
+
+async function trashDropped(paths: string[]): Promise<void> {
+  let n = 0;
+  for (const p of paths) {
+    try {
+      await shell.trashItem(p);
+      n++;
+    } catch (err) {
+      console.error('No se pudo mandar a la papelera:', p, err);
+    }
+  }
+  const failed = paths.length - n;
+  send({ type: 'notice', text: `¡Ñam! ${n} a la papelera.${failed ? ` No pude con ${failed}.` : ''}` });
+}
+
+async function chooseAndMove(paths: string[]): Promise<void> {
+  const options: Electron.OpenDialogOptions = { title: '¿Adónde los llevo?', buttonLabel: 'Mover aquí', properties: ['openDirectory', 'createDirectory'] };
+  if (isMac) app.focus({ steal: true });
+  const r = await dialog.showOpenDialog(options);
+  if (r.canceled || !r.filePaths[0]) return;
+  // La próxima vez aparece como opción rápida.
+  updateSettings({ dropFolder: r.filePaths[0] });
+  moveDropped(paths, r.filePaths[0]);
+}
+
+function onDrop(raw: unknown): void {
+  const paths = cleanPaths(raw);
+  if (paths.length === 0 || !win) return;
+  const what = paths.length === 1 ? `"${path.basename(paths[0])}"` : `${paths.length} archivos`;
+  const items: MenuItemConstructorOptions[] = [{ label: what, enabled: false }, { type: 'separator' }];
+  if (settings.dropFolder && fs.existsSync(settings.dropFolder)) {
+    items.push({ label: `Mover a "${path.basename(settings.dropFolder)}"`, click: () => moveDropped(paths, settings.dropFolder) });
+  }
+  items.push(
+    { label: 'Mover a otra carpeta…', click: () => void chooseAndMove(paths) },
+    { label: 'Mandar a la papelera', click: () => void trashDropped(paths) },
+    { type: 'separator' },
+    { label: 'Cancelar' },
+  );
+  Menu.buildFromTemplate(items).popup({ window: win });
+}
+
+// ---------------------------------------------------------- lo que cuenta el perro
+
+function onReport(kind: PetReport): void {
+  const now = Date.now();
+  switch (kind) {
+    case 'pet':
+      stats.add(now, 'pets');
+      mood.apply('pet');
+      break;
+    case 'treat':
+      stats.add(now, 'treats');
+      mood.apply('treat');
+      break;
+    case 'play':
+      if (now - lastPlayReport < 15_000) return;
+      lastPlayReport = now;
+      mood.apply('play');
+      break;
+    case 'drank': {
+      // Solo cuenta si hubo un aviso de agua hace poco.
+      if (now - lastWaterAt > 3 * 60_000) return;
+      lastWaterAt = 0;
+      stats.add(now, 'water');
+      mood.apply('water');
+      const n = stats.today(now).water;
+      send({ type: 'notice', text: `¡Bien! ${n === 1 ? 'Primer vaso' : `Van ${n} vasos`} de hoy 💧` });
+      break;
+    }
+  }
+  sendMood();
+  dayChanged();
+}
+
+function deviceText(a: DeviceAlert): string {
+  switch (a.kind) {
+    case 'battery':
+      return `🔋 Me queda poca batería: ${a.percent}%. ¿Me enchufas?`;
+    case 'offline':
+      return '🔌 Se cayó internet.';
+    case 'online':
+      return '¡Volvió internet!';
+    case 'restart':
+      return `El equipo lleva ${a.days} días sin reiniciarse. Cuando puedas, reinícialo: anda más rápido.`;
+  }
+}
+
+function setBall(out: boolean): void {
+  ballOut = out;
+  if (out) showPet();
+  send({ type: 'ball', out });
+  refreshTray();
 }
 
 // ------------------------------------------------------------- bandeja
@@ -360,8 +688,27 @@ function trayImage(): Electron.NativeImage {
 function updateSettings(patch: Partial<Settings>): void {
   settings = { ...settings, ...patch };
   saveSettings(settingsFile, settings);
-  if (patch.size) send({ type: 'settings', size: settings.size });
+  if (patch.size !== undefined || patch.sound !== undefined || patch.name !== undefined) sendSettings();
+  for (const w of Object.values(panels)) if (w && !w.isDestroyed()) w.webContents.send('settings:changed');
   refreshTray();
+}
+
+function sendSettings(): void {
+  send({ type: 'settings', size: settings.size, sound: settings.sound, name: settings.name });
+}
+
+function sendMood(force = false): void {
+  const s = mood.state;
+  const key = `${Math.round(s.joy)}/${Math.round(s.food)}`;
+  if (!force && key === lastMoodSent) return;
+  lastMoodSent = key;
+  send({ type: 'mood', joy: s.joy, food: s.food });
+}
+
+/** Avisa a "Mi día" (si está abierta) que algo cambió. */
+function dayChanged(): void {
+  const w = panels.day;
+  if (w && !w.isDestroyed()) w.webContents.send('day:changed');
 }
 
 function startFocus(minutes: number): void {
@@ -413,9 +760,14 @@ function visibilityMenu(): MenuItemConstructorOptions[] {
 function buildMenu(): Menu {
   const shown = win !== null && !win.isDestroyed() && win.isVisible();
   const template: MenuItemConstructorOptions[] = [
+    ...(settings.name ? [{ label: `🐶 ${settings.name}`, enabled: false }] : []),
     ...visibilityMenu(),
     { type: 'separator' },
     { label: 'Dar un premio', enabled: shown, click: () => send({ type: 'treat' }) },
+    ballOut
+      ? { label: 'Guardar la pelota', click: () => setBall(false) }
+      : { label: 'Jugar a la pelota', enabled: shown, click: () => setBall(true) },
+    { label: tasks.pending.length ? `Mi día (${tasks.pending.length} pendientes)…` : 'Mi día…', click: () => openPanel('day') },
     remindersMenu(),
     focus.active
       ? { label: `Cancelar foco (quedan ${focus.remainingMin(Date.now())} min)`, click: cancelFocus }
@@ -485,6 +837,7 @@ function buildMenu(): Menu {
       checked: app.isPackaged && app.getLoginItemSettings().openAtLogin,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
     },
+    { label: 'Ajustes…', click: () => openPanel('settings') },
     { type: 'separator' },
     ...updateMenu(),
     { type: 'separator' },
@@ -496,7 +849,8 @@ function buildMenu(): Menu {
 function refreshTray(): void {
   if (!tray) return;
   tray.setContextMenu(buildMenu());
-  tray.setToolTip(focus.active ? `Pet: foco, quedan ${focus.remainingMin(Date.now())} min` : 'Pet');
+  const title = settings.name || 'Pet';
+  tray.setToolTip(focus.active ? `${title}: foco, quedan ${focus.remainingMin(Date.now())} min` : title);
 }
 
 function createTray(): void {
@@ -539,6 +893,8 @@ function tickActivity(): void {
     breakEveryMin: settings.breakEveryMin,
   });
   for (const event of events) send(event);
+  if (!tracker.isAway) stats.addActive(now, 1);
+  for (const e of events) if (e.type === 'back' && e.awaySec >= 300) stats.add(now, 'breaks');
   // Que el aviso de agua no pise el saludo de bienvenida ni el aviso de descanso.
   if (events.some((e) => e.type === 'back' || e.type === 'break-due')) water.postpone(now, 60_000);
 
@@ -546,6 +902,8 @@ function tickActivity(): void {
     water.postpone(now, 60_000);
     // Si estaba oculto, aparece: pediste que te avisara.
     notify({ type: 'focus-end', completed: true, minutes: focus.minutes });
+    stats.add(now, 'focusSessions');
+    stats.add(now, 'focusMin', focus.minutes);
     tracker.snooze(now);
     refreshTray();
   } else if (focus.active) {
@@ -576,7 +934,73 @@ function tickActivity(): void {
     away: tracker.isAway,
     quiet: focus.active,
   });
-  if (thirsty) send({ type: 'water' });
+  if (thirsty) {
+    lastWaterAt = now;
+    send({ type: 'water' });
+  }
+
+  tickDay(now, shown);
+}
+
+/** Lo que no necesita revisarse cada segundo: tareas, ánimo, equipo, reuniones. */
+let slowTick = 0;
+function tickDay(now: number, shown: boolean): void {
+  // Las reuniones sí se revisan cada segundo: el aviso tiene que llegar a tiempo.
+  if (settings.calendarUrl) {
+    for (const m of meetingAlerts.tick(now, meetings, settings.meetingLeadMin)) {
+      water.postpone(now, 90_000);
+      notify({ type: 'reminder', text: meetingText(m) });
+    }
+    if (now - calendarFetchedAt > CALENDAR_REFRESH_MS) void refreshCalendar();
+  }
+
+  if (++slowTick % 5 !== 0) return;
+  const away = tracker.isAway;
+  const quiet = focus.active || !shown;
+
+  const today = dayKey(now);
+  if (today !== currentDay) {
+    currentDay = today;
+    tasks.rollover(now);
+    dayChanged();
+    refreshTray();
+  }
+
+  const pending = tasks.pending;
+  const nudge = nudger.tick({ now, pending: pending.length, enabled: settings.taskNudges, away, quiet });
+  if (nudge) {
+    const list = pending.slice(0, 3).map((t) => `• ${t.text}`).join('\n');
+    const more = pending.length > 3 ? `\n…y ${pending.length - 3} más` : '';
+    const head = nudge === 'morning' ? `¡Buen día! Para hoy tienes ${pending.length}:` : `Te quedan ${pending.length} pendiente${pending.length === 1 ? '' : 's'}:`;
+    water.postpone(now, 60_000);
+    send({ type: 'notice', text: `${head}\n${list}${more}` });
+  }
+
+  const alerts = device.tick({
+    now,
+    enabled: settings.deviceAlerts,
+    away,
+    online: net.isOnline(),
+    battery,
+    uptimeSec: os.uptime(),
+  });
+  for (const a of alerts) {
+    if (a.kind === 'battery') notify({ type: 'reminder', text: deviceText(a) });
+    else send({ type: 'notice', text: deviceText(a) });
+  }
+
+  mood.decay(5000, away);
+  sendMood();
+  if (mood.hungry && !away && !quiet && now - lastHungerNudge > HUNGER_NUDGE_MS) {
+    lastHungerNudge = now;
+    send({ type: 'notice', text: 'Tengo hambre… ¿me das un premio? 🦴' });
+  }
+
+  if (slowTick % 60 === 0) {
+    stats.save();
+    mood.save();
+    dayChanged();
+  }
 }
 
 // ---------------------------------------------------------------- app
@@ -586,6 +1010,10 @@ function start(): void {
   settings = loadSettings(settingsFile);
   water = new WaterReminder(Date.now(), settings.waterEveryMin);
   reminders = new ReminderStore(path.join(app.getPath('userData'), 'reminders.json'));
+  stats = new StatsStore(path.join(app.getPath('userData'), 'stats.json'));
+  tasks = new TaskStore(path.join(app.getPath('userData'), 'tasks.json'));
+  mood = new Mood(path.join(app.getPath('userData'), 'mood.json'));
+  registerPanelHandlers();
 
   if (isWin) app.setAppUserModelId('com.dusanap1991.pet');
   if (isMac) app.dock?.hide();
@@ -593,7 +1021,9 @@ function start(): void {
   ipcMain.on('pet:ready', (event) => {
     if (!isFromPet(event)) return;
     rendererReady = true;
-    send({ type: 'settings', size: settings.size });
+    sendSettings();
+    sendMood(true);
+    if (ballOut) send({ type: 'ball', out: true });
     if (tracker.isAway) send({ type: 'away' });
     if (focus.active) send({ type: 'focus-start', minutes: focus.minutes });
   });
@@ -606,6 +1036,20 @@ function start(): void {
   ipcMain.on('pet:dragging', (event, on: unknown) => {
     if (!isFromPet(event)) return;
     dragging = on === true;
+  });
+
+  ipcMain.on('pet:report', (event, kind: unknown) => {
+    if (!isFromPet(event)) return;
+    if (kind === 'pet' || kind === 'treat' || kind === 'play' || kind === 'drank') onReport(kind);
+  });
+
+  ipcMain.on('pet:battery', (event, level: unknown, charging: unknown) => {
+    if (!isFromPet(event)) return;
+    battery = typeof level === 'number' && level >= 0 && level <= 1 ? { level, charging: charging === true } : null;
+  });
+
+  ipcMain.on('pet:drop', (event, paths: unknown) => {
+    if (isFromPet(event)) onDrop(paths);
   });
 
   ipcMain.on('pet:menu', (event) => {
@@ -635,6 +1079,11 @@ function start(): void {
     updateFullscreen();
   });
   app.on('before-quit', stopWatching);
+  app.on('before-quit', () => {
+    stats.save();
+    mood.save();
+  });
+  void refreshCalendar();
 
   screen.on('display-metrics-changed', fitToDisplay);
   screen.on('display-added', fitToDisplay);

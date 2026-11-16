@@ -1,10 +1,12 @@
+import type { BallTarget } from '../ball';
 import type { Fx } from '../fx';
 import { drawDog, drawDogFront, frontHeight, type DrawExtras } from './draw';
 import { LIE, SIT, SLEEP, STAND, approachPose, clonePose, type Pose } from './pose';
 
 export type DogState =
   | 'idle' | 'walk' | 'sniff' | 'run' | 'sit' | 'lie' | 'sleep'
-  | 'alert' | 'eat' | 'happy' | 'bark' | 'drag' | 'fall' | 'land';
+  | 'alert' | 'eat' | 'happy' | 'bark' | 'drag' | 'fall' | 'land'
+  | 'fetch' | 'pickup' | 'carry';
 
 type Posture = 'stand' | 'sit' | 'lie' | 'sleep';
 
@@ -27,6 +29,13 @@ export interface DogHooks {
   /** El premio más cercano que ya está en el suelo, si hay. */
   nearestTreat(x: number): TreatTarget | null;
   eatTreat(t: TreatTarget): void;
+  ball(): BallTarget | null;
+  /** El perro agarra la pelota con la boca (o la mueve mientras la lleva). */
+  carryBall(x: number, y: number): void;
+  /** La deja caer; `vx` le da un empujoncito hacia ti. */
+  dropBall(vx: number): void;
+  /** Trajo la pelota de vuelta. */
+  played(): void;
 }
 
 const TAU = Math.PI * 2;
@@ -52,6 +61,7 @@ const WAG: Record<DogState, [number, number]> = {
   idle: [0.1, 5], walk: [0.18, 7], sniff: [0.2, 8], run: [0.25, 10], sit: [0.16, 6],
   lie: [0.06, 3], sleep: [0, 2], alert: [0.04, 4], eat: [0.45, 13], happy: [0.6, 17],
   bark: [0.3, 12], drag: [0, 4], fall: [0, 4], land: [0.12, 6],
+  fetch: [0.3, 11], pickup: [0.4, 12], carry: [0.5, 13],
 };
 
 function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
@@ -124,6 +134,11 @@ export class Dog {
   private ate = false;
   private fxTimer = 0;
   private lookBehindT = 0;
+  /** Último lanzamiento que ya fue a buscar. */
+  private fetchedThrow = 0;
+  /** 0 = triste, 100 = feliz; 0 = hambriento, 100 = lleno. */
+  private joy = 70;
+  private food = 80;
   private world: World = { width: 800, floorY: 600, cursorX: 0, cursorY: 0, cursorKnown: false };
 
   constructor(scale: number, private fx: Fx, private hooks: DogHooks) {
@@ -177,7 +192,8 @@ export class Dog {
     }
     if (state === 'walk') { this.stride = 13; this.lift = 5; }
     if (state === 'sniff') { this.stride = 9; this.lift = 3; }
-    if (state === 'run') { this.stride = 21; this.lift = 8; }
+    if (state === 'run' || state === 'fetch') { this.stride = 21; this.lift = 8; }
+    if (state === 'carry') { this.stride = 15; this.lift = 6; }
     if (state === 'eat') this.ate = false;
   }
 
@@ -192,6 +208,22 @@ export class Dog {
   private bounds(): [number, number] {
     const m = 70 * this.scale;
     return [m, Math.max(m, this.world.width - m)];
+  }
+
+  get sad(): boolean {
+    return this.joy < 35;
+  }
+
+  setMood(joy: number, food: number): void {
+    this.joy = joy;
+    this.food = food;
+  }
+
+  /** Algo nuevo se acerca (por ejemplo, archivos arrastrados): se pone atento. */
+  curious(): void {
+    if (!this.calm || this.state === 'sleep') return;
+    this.enter('alert', 0.9);
+    this.posture = 'stand';
   }
 
   // ------------------------------------------------------------ interacción
@@ -333,7 +365,8 @@ export class Dog {
     this.gait += ((moving ? 1 : 0) - this.gait) * (1 - Math.exp(-12 * dt));
 
     // Cola.
-    const [amp, freq] = WAG[this.state];
+    const [baseAmp, freq] = WAG[this.state];
+    const amp = baseAmp * (0.45 + this.joy / 110);
     this.wagAmp += (amp - this.wagAmp) * (1 - Math.exp(-8 * dt));
     this.wagFreq += (freq - this.wagFreq) * (1 - Math.exp(-8 * dt));
     this.wagPhase += this.wagFreq * dt;
@@ -372,23 +405,23 @@ export class Dog {
   private think(dt: number): void {
     switch (this.state) {
       case 'idle':
-        if (this.noticeTreat()) return;
+        if (this.noticeTreat() || this.noticeBall()) return;
         this.turnTowardCursor(dt);
         if (this.stateT >= this.stateDur) this.chooseFromIdle();
         break;
 
       case 'walk':
-        if (this.noticeTreat()) return;
+        if (this.noticeTreat() || this.noticeBall()) return;
         if (this.moveToward(dt, 42)) this.enter('idle', rand(1.5, 5));
         break;
 
       case 'sniff':
-        if (this.noticeTreat()) return;
+        if (this.noticeTreat() || this.noticeBall()) return;
         if (this.moveToward(dt, 20)) this.enter('idle', rand(1.5, 4));
         break;
 
       case 'sit':
-        if (this.noticeTreat()) return;
+        if (this.noticeTreat() || this.noticeBall()) return;
         if (this.stateT >= this.stateDur) {
           const r = Math.random();
           if (this.awayMode || this.focusMode || r < 0.3) this.enter('lie', rand(8, 18));
@@ -398,7 +431,7 @@ export class Dog {
         break;
 
       case 'lie':
-        if (this.noticeTreat()) return;
+        if (this.noticeTreat() || this.noticeBall()) return;
         if (this.stateT >= this.stateDur) {
           const r = Math.random();
           if (this.awayMode) this.enter('sleep');
@@ -464,6 +497,62 @@ export class Dog {
         break;
       }
 
+      case 'fetch': {
+        const ball = this.hooks.ball();
+        if (!ball || ball.holder !== 'none') {
+          this.enter('idle', rand(1, 2));
+          break;
+        }
+        const reach = MOUTH_REACH * this.scale;
+        const side = ball.x >= this.x ? 1 : -1;
+        this.targetX = ball.x - side * reach;
+        const [lo, hi] = this.bounds();
+        if (this.targetX < lo || this.targetX > hi) this.targetX = ball.x + side * reach;
+        const arrived = this.moveToward(dt, 190);
+        this.facing = ball.x >= this.x ? 1 : -1;
+        if (arrived && ball.grabbable) this.enter('pickup', 0.35);
+        break;
+      }
+
+      case 'pickup': {
+        const ball = this.hooks.ball();
+        if (!ball || ball.holder === 'user') {
+          this.enter('idle', 1);
+          break;
+        }
+        if (this.stateT >= this.stateDur * 0.6 || ball.holder === 'dog') this.holdBall();
+        if (this.stateT >= this.stateDur) {
+          // Te la trae: camina hacia donde está el cursor.
+          const [lo, hi] = this.bounds();
+          const w = this.world;
+          const reach = MOUTH_REACH * this.scale;
+          const goal = w.cursorKnown ? w.cursorX : (lo + hi) / 2;
+          this.targetX = clamp(goal + (goal >= this.x ? -reach : reach) * 0.7, lo, hi);
+          this.enter('carry');
+        }
+        break;
+      }
+
+      case 'carry': {
+        const ball = this.hooks.ball();
+        if (!ball || ball.holder === 'user') {
+          this.enter('idle', 1);
+          break;
+        }
+        const arrived = this.moveToward(dt, 85);
+        this.holdBall();
+        if (arrived) {
+          const w = this.world;
+          if (w.cursorKnown) this.facing = w.cursorX >= this.x ? 1 : -1;
+          this.hooks.dropBall(this.facing * 70 * this.scale);
+          this.fetchedThrow = ball.throwId;
+          this.hooks.played();
+          this.enter('happy', 1.3);
+          this.spawnHeart();
+        }
+        break;
+      }
+
       case 'happy':
         this.fxTimer += dt;
         if (this.fxTimer >= 0.38) {
@@ -512,7 +601,8 @@ export class Dog {
   private chooseFromIdle(): void {
     if (this.awayMode) return this.enter('lie', 1.2);
     if (this.focusMode) return this.enter('lie', rand(20, 40));
-    const r = Math.random();
+    // Triste o con hambre: se mueve menos.
+    const r = Math.random() * (this.sad || this.food < 25 ? 0.6 : 1) + (this.sad ? 0.4 : 0);
     if (r < 0.45) this.startWalk();
     else if (r < 0.62) this.startSniff();
     else if (r < 0.82) this.enter('sit', rand(5, 11));
@@ -548,6 +638,22 @@ export class Dog {
     const h = this.headOffset();
     this.fx.bang(h.x, h.y - 34 * this.scale, this.scale);
     return true;
+  }
+
+  /** Si lanzaste la pelota, va a buscarla. */
+  private noticeBall(): boolean {
+    const ball = this.hooks.ball();
+    if (!ball || ball.holder !== 'none' || ball.throwId === this.fetchedThrow || this.awayMode || this.focusMode) return false;
+    this.fetchedThrow = ball.throwId;
+    this.enter('fetch');
+    const h = this.headOffset();
+    this.fx.bang(h.x, h.y - 34 * this.scale, this.scale);
+    return true;
+  }
+
+  private holdBall(): void {
+    const m = this.mouthOffset();
+    this.hooks.carryBall(this.x + m.x, this.y + m.y - 3 * this.scale);
   }
 
   /** Avanza hacia `targetX`; devuelve true al llegar. */
@@ -606,6 +712,29 @@ export class Dog {
         tp.headY = -27;
         tp.snoutAng = 0.62 + 0.05 * Math.sin(this.t * 22);
         tp.earAng = 0.05;
+        break;
+      case 'fetch':
+        tp.earAng = 0.95;
+        tp.tailAng = -2.95;
+        tp.tailCurl = 0.12;
+        tp.mouthOpen = 0.3;
+        tp.tongue = 0.9;
+        tp.headX += 3;
+        tp.headY += 3;
+        break;
+      case 'pickup':
+        tp.headX = 60;
+        tp.headY = -25;
+        tp.snoutAng = 0.72;
+        tp.earAng = 0;
+        tp.mouthOpen = 0.45;
+        break;
+      case 'carry':
+        tp.headY -= 3;
+        tp.snoutAng = -0.05;
+        tp.mouthOpen = 0.42;
+        tp.earAng = 0.35;
+        tp.tailAng = -2.35;
         break;
       case 'eat':
         tp.headX = 60;
@@ -709,6 +838,16 @@ export class Dog {
         tp.headY += look * 4;
         tp.earAng -= look * 0.12;
       }
+    }
+
+    // Triste: orejas y cola caídas, cabeza más baja.
+    const calmish = this.state === 'idle' || this.state === 'sit' || this.state === 'lie' || this.state === 'walk' || this.state === 'sniff';
+    if (this.sad && calmish) {
+      tp.earAng += 0.3;
+      tp.tailAng = Math.min(tp.tailAng, -3.35);
+      tp.tailCurl = 0.04;
+      tp.headY += 4;
+      tp.snoutAng += 0.12;
     }
 
     if (this.blinkT > 0 && tp.eyeOpen > 0.5 && tp.eyeHappy < 0.5) tp.eyeOpen = 0;

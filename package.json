@@ -20,6 +20,7 @@
     "electron": "^45.3.2",
     "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
+    "ical.js": "^2.2.1",
     "typescript": "^7.0.2"
   },
   "build": {
@@ -33,7 +34,7 @@
       "dist/**/*",
       "package.json"
     ],
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "${productName}-${os}-${arch}.${ext}",
     "mac": {
       "category": "public.app-category.entertainment",
       "target": [
