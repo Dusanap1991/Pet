@@ -3,7 +3,7 @@
 export type PetSize = 's' | 'm' | 'l';
 export type Coat = 'red' | 'blacktan' | 'chocolate' | 'cream' | 'dapple';
 export type Outfit = 'santa' | 'witch' | 'scarf' | null;
-export type DogStyle = '2d' | '3d';
+export type DogStyle = '2d' | '3d' | 'photo';
 
 /** Mensajes que el proceso principal le manda al perro. */
 export type PetEvent =

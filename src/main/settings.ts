@@ -65,7 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   weatherPlace: null,
   costumes: true,
   coat: 'red',
-  style: '2d',
+  style: 'photo',
 };
 
 export const COATS: [Coat, string][] = [
@@ -115,7 +115,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     out.weatherPlace = { name: place.name.slice(0, 120), lat: place.lat, lon: place.lon };
   }
   if (COATS.some(([id]) => id === r.coat)) out.coat = r.coat as Coat;
-  if (r.style === '2d' || r.style === '3d') out.style = r.style;
+  if (r.style === '2d' || r.style === '3d' || r.style === 'photo') out.style = r.style;
   if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;
 }

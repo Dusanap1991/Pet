@@ -1,0 +1,55 @@
+{
+  "fps": 24,
+  "dogLengthPx": 470,
+  "clips": {
+    "quieto": {
+      "src": "media/clips/01-quieto.mp4",
+      "start": 0,
+      "end": 10,
+      "kind": "loop",
+      "minLen": 4,
+      "maxLen": 9.5
+    },
+    "caminar": {
+      "src": "media/clips/02-caminar.mp4",
+      "start": 10.5,
+      "end": 20,
+      "kind": "loop",
+      "treadmillTop": 0.8,
+      "stabilize": true,
+      "minLen": 2,
+      "maxLen": 8
+    },
+    "correr": {
+      "src": "media/clips/03-correr.mp4",
+      "start": 20.5,
+      "end": 30,
+      "kind": "loop",
+      "treadmillTop": 0.8,
+      "stabilize": true,
+      "minLen": 1.5,
+      "maxLen": 7
+    },
+    "sentarse": {
+      "src": "media/clips/04-sentarse.mp4",
+      "start": 2.6,
+      "end": 6.2,
+      "kind": "once"
+    },
+    "sentado": {
+      "src": "media/clips/05-sentado.mp4",
+      "start": 0,
+      "end": 10,
+      "kind": "loop",
+      "minLen": 4,
+      "maxLen": 9.5
+    },
+    "levantarse": {
+      "src": "media/clips/04-sentarse.mp4",
+      "start": 2.6,
+      "end": 6.2,
+      "kind": "once",
+      "reverse": true
+    }
+  }
+}

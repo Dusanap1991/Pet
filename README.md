@@ -53,7 +53,11 @@ Para Windows y macOS.
 - **Juega y hace gracias**: si mueves el mouse rápido cerca del suelo, hace una
   reverencia y lo persigue; además bosteza, se estira, se sacude y persigue su cola.
   De noche está más dormilón.
-- **Estilo 3D (nuevo)**: en Ajustes → Estilo puedes cambiar el dibujo por un
+- **Perro realista**: el estilo por defecto usa videos de un perro salchicha de
+  verdad, recortados del fondo verde (quieto, caminando, trotando, sentándose,
+  sentado y levantándose). Los videos originales y cómo agregar más están en
+  [media/clips/LEEME.md](media/clips/LEEME.md).
+- **Estilo 3D**: en Ajustes → Estilo puedes cambiar el dibujo por un
   perro en 3D, con volumen, luz, sombra y giros reales (se pone de tres cuartos
   cuando está tranquilo, gira al darse vuelta y cuelga de frente al levantarlo).
   Usa la tarjeta gráfica; si el equipo no la tiene disponible, vuelve solo al dibujo.

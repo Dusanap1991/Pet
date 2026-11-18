@@ -1,9 +1,9 @@
-// Sirve dist/renderer para ver al perro en un navegador común (sin Electron).
+// Sirve dist/ (la página está en /renderer/) para ver al perro en un navegador común (sin Electron).
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 
-const root = resolve('dist/renderer');
+const root = resolve('dist');
 const port = Number(process.env.PORT) || 5173;
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -11,11 +11,17 @@ const types = {
   '.css': 'text/css; charset=utf-8',
   '.png': 'image/png',
   '.map': 'application/json',
+  '.json': 'application/json',
+  '.webm': 'video/webm',
 };
 
 createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
-  const file = normalize(join(root, urlPath === '/' ? 'index.html' : urlPath));
+  if (urlPath === '/') {
+    res.writeHead(302, { Location: '/renderer/' }).end();
+    return;
+  }
+  const file = normalize(join(root, urlPath.endsWith('/') ? `${urlPath}index.html` : urlPath));
   if ((file !== root && !file.startsWith(root + sep)) || !existsSync(file) || !statSync(file).isFile()) {
     res.writeHead(404).end('No encontrado');
     return;

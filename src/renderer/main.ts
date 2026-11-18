@@ -1,6 +1,7 @@
 import { SIZE_SCALE, type PetBridge, type PetEvent, type PetReport, type PetSize } from '../shared/types';
 import { Ball } from './ball';
 import type { Dog3D } from './dog3d/dog3d';
+import { DogVideo } from './dogvideo';
 import { Bubble } from './bubble';
 import { DEMO_TASKBAR, setupDemo } from './demo';
 import { Dog, type World } from './dog/dog';
@@ -35,7 +36,15 @@ let canvas3d: HTMLCanvasElement | null = null;
 let want3d = false;
 let loading3d = false;
 
-async function setStyle(style: '2d' | '3d'): Promise<void> {
+/** Perro realista: videos de un perro de verdad, debajo del lienzo 2D. */
+let dogVideo: DogVideo | null = null;
+let photo = false;
+
+async function setStyle(style: '2d' | '3d' | 'photo'): Promise<void> {
+  photo = style === 'photo';
+  dog.photo = photo;
+  if (photo && !dogVideo) dogVideo = new DogVideo(stage, canvas, '../assets/dog/');
+  dogVideo?.setVisible(photo);
   want3d = style === '3d';
   dog.style3d = want3d && !!dog3d;
   if (!want3d) {
@@ -358,7 +367,10 @@ function frame(now: number): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, BOX_W * scale, BOX_H * scale);
   ctx.translate(ORIGIN_X * scale, ORIGIN_Y * scale);
-  if (dog3d && dog.style3d && canvas3d) {
+  if (photo && dogVideo) {
+    dogVideo.update(dog.videoView(), dog.x, dog.y, scale);
+    dog.drawShadow(ctx);
+  } else if (dog3d && dog.style3d && canvas3d) {
     canvas3d.style.transform = boxTransform;
     dog3d.render(dog.view3d());
   } else {

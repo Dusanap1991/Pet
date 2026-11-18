@@ -1,0 +1,72 @@
+{
+  "clips": {
+    "quieto": {
+      "file": "quieto.webm",
+      "poster": "quieto.png",
+      "width": 502,
+      "height": 280,
+      "frames": 226,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 272.34364152315186,
+      "anchorY": 269.0
+    },
+    "caminar": {
+      "file": "caminar.webm",
+      "poster": "caminar.png",
+      "width": 488,
+      "height": 270,
+      "frames": 183,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 260.94856089856665,
+      "anchorY": 255.0
+    },
+    "correr": {
+      "file": "correr.webm",
+      "poster": "correr.png",
+      "width": 488,
+      "height": 266,
+      "frames": 77,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 264.2250851039609,
+      "anchorY": 250.0
+    },
+    "sentarse": {
+      "file": "sentarse.webm",
+      "poster": "sentarse.png",
+      "width": 480,
+      "height": 258,
+      "frames": 88,
+      "fps": 24,
+      "loop": false,
+      "anchorX": 267.5517559814744,
+      "anchorY": 248.0
+    },
+    "sentado": {
+      "file": "sentado.webm",
+      "poster": "sentado.png",
+      "width": 466,
+      "height": 282,
+      "frames": 145,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 260.09827749327343,
+      "anchorY": 271.0
+    },
+    "levantarse": {
+      "file": "levantarse.webm",
+      "poster": "levantarse.png",
+      "width": 480,
+      "height": 258,
+      "frames": 88,
+      "fps": 24,
+      "loop": false,
+      "anchorX": 267.5517559814744,
+      "anchorY": 248.0
+    }
+  },
+  "dogLengthPx": 470,
+  "workWidth": 640
+}

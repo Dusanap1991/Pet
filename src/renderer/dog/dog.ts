@@ -1,6 +1,7 @@
 import type { BallTarget } from '../ball';
 import type { Fx } from '../fx';
 import type { View3D } from '../dog3d/dog3d';
+import type { VideoView } from '../dogvideo';
 import { COATS, DACHSHUND, drawDog, drawDogFront, frontHeight, type DrawExtras, type OutfitKind, type Palette } from './draw';
 import { LIE, SIT, SLEEP, STAND, approachPose, clonePose, type Pose } from './pose';
 
@@ -127,6 +128,8 @@ export class Dog {
   private front = 0;
   /** Estilo de dibujo: el 3D cambia cómo cuelga y cómo cae de frente. */
   style3d = false;
+  /** Estilo realista (video): sin vista de frente y con velocidades que calcen con los videos. */
+  photo = false;
   /** Giro hacia la cámara cuando está tranquilo (solo 3D): se ve de tres cuartos. */
   private turn = 0;
   /** Lo soltaron estando de frente: cae y aterriza sentado mirando hacia afuera. */
@@ -168,6 +171,7 @@ export class Dog {
   /** true si conviene dibujar a pocos cuadros por segundo. */
   /** Cuánto se inclina al colgar del pellejo: en 3D casi vertical cuando ya mira de frente. */
   private hangMax(): number {
+    if (this.photo) return 0.9;
     return this.style3d ? HANG_MAX + 0.75 * this.front : HANG_MAX;
   }
 
@@ -175,6 +179,35 @@ export class Dog {
     const fv = clamp(this.faceVis, -1, 1);
     const side = -Math.acos(fv) - 0.5 * this.turn * (fv >= 0 ? 1 : -1) * (1 - this.front);
     return side + (-Math.PI / 2 - side) * this.front;
+  }
+
+  /** Lo que necesita el estilo realista (video) en este cuadro. */
+  videoView(): VideoView {
+    return {
+      state: this.state,
+      posture: this.posture,
+      facing: this.facing,
+      squash: this.squash,
+      tilt: this.rot - this.facing * this.hang * this.hangMax(),
+      pivotX: this.grabDX,
+      pivotY: this.grabDY,
+    };
+  }
+
+  /** Solo la sombra (para el estilo realista, que dibuja al perro con video). */
+  drawShadow(ctx: CanvasRenderingContext2D): void {
+    const s = this.scale;
+    const height = this.world.floorY - this.y;
+    const air = clamp(height / (130 * s), 0, 1);
+    if (air >= 1) return;
+    ctx.save();
+    ctx.globalAlpha = 0.2 * (1 - air);
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    const sitting = this.posture !== 'stand';
+    ctx.ellipse((sitting ? -6 : 0) * s * this.facing, height + 1.5 * s, (sitting ? 52 : 70) * s * (1 - 0.3 * air), 6 * s, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
   }
 
   /** Lo que necesita el renderizador 3D en este cuadro. */
@@ -449,7 +482,7 @@ export class Dog {
     this.hang += (hangTarget - this.hang) * (1 - Math.exp(-(this.state === 'drag' ? 9 : 16) * dt));
     const lift = (world.floorY - this.y) / this.scale;
     if (this.state !== 'drag') this.frontOn = false;
-    else if (lift > FRONT_ON) this.frontOn = true;
+    else if (lift > FRONT_ON && !this.photo) this.frontOn = true;
     else if (lift < FRONT_OFF) this.frontOn = false;
     if (this.state !== 'fall' && this.state !== 'land') this.frontFall = false;
     const ease = (rate: number): number => 1 - Math.exp(-rate * dt);
@@ -810,6 +843,8 @@ export class Dog {
 
   /** Avanza hacia `targetX`; devuelve true al llegar. */
   private moveToward(dt: number, speed: number): boolean {
+    // En video el perro trota, no corre a toda velocidad: así las patas no patinan.
+    if (this.photo) speed = Math.min(speed, 90);
     const dx = this.targetX - this.x;
     const step = speed * this.scale * dt;
     const dist = Math.min(Math.abs(dx), step);
