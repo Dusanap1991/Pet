@@ -16,6 +16,7 @@ body {
 }
 
 #dog,
+#dog3d,
 .treat,
 .ball,
 .bubble {
@@ -25,7 +26,8 @@ body {
   will-change: transform;
 }
 
-#dog {
+#dog,
+#dog3d {
   pointer-events: none;
 }
 

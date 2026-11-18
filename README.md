@@ -53,6 +53,10 @@ Para Windows y macOS.
 - **Juega y hace gracias**: si mueves el mouse rápido cerca del suelo, hace una
   reverencia y lo persigue; además bosteza, se estira, se sacude y persigue su cola.
   De noche está más dormilón.
+- **Estilo 3D (nuevo)**: en Ajustes → Estilo puedes cambiar el dibujo por un
+  perro en 3D, con volumen, luz, sombra y giros reales (se pone de tres cuartos
+  cuando está tranquilo, gira al darse vuelta y cuelga de frente al levantarlo).
+  Usa la tarjeta gráfica; si el equipo no la tiene disponible, vuelve solo al dibujo.
 - **Pelajes y disfraces**: colorado, negro y fuego, chocolate, crema o arlequín;
   gorro en Navidad, sombrero de bruja en Halloween y bufanda en invierno (según tu
   hemisferio).
@@ -145,6 +149,11 @@ src/
 El perro no usa imágenes: se dibuja por código a partir de una pose, y las
 animaciones salen de interpolar poses. Por eso se ve nítido a cualquier tamaño y
 agregar un movimiento nuevo es agregar una pose.
+
+El estilo 3D (`src/renderer/dog3d/`) usa Three.js y las mismas poses: cada
+cuadro rehace el cuerpo, el cuello, las patas, el hocico y la cola como tubos con
+volumen a partir de los puntos clave, así que todas las animaciones sirven en
+los dos estilos.
 
 La parte del perro es web pura y no conoce Electron: recibe eventos (`away`,
 `back`, `treat`, `break-due`...) y avisa cuándo quiere recibir clics. Eso permite

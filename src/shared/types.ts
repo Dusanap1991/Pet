@@ -3,6 +3,7 @@
 export type PetSize = 's' | 'm' | 'l';
 export type Coat = 'red' | 'blacktan' | 'chocolate' | 'cream' | 'dapple';
 export type Outfit = 'santa' | 'witch' | 'scarf' | null;
+export type DogStyle = '2d' | '3d';
 
 /** Mensajes que el proceso principal le manda al perro. */
 export type PetEvent =
@@ -16,7 +17,7 @@ export type PetEvent =
   | { type: 'water' }
   | { type: 'reminder'; text: string }
   | { type: 'notice'; text: string }
-  | { type: 'settings'; size: PetSize; sound: boolean; name: string; coat: Coat; outfit: Outfit }
+  | { type: 'settings'; size: PetSize; sound: boolean; name: string; coat: Coat; outfit: Outfit; style: DogStyle }
   | { type: 'eyes' }
   | { type: 'mood'; joy: number; food: number }
   | { type: 'ball'; out: boolean };

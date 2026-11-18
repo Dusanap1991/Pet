@@ -41,7 +41,11 @@ export function setupDemo(emit: (e: PetEvent) => void): void {
   add('Triste', () => emit({ type: 'mood', joy: 10, food: 10 }));
   add('Feliz', () => emit({ type: 'mood', joy: 90, food: 90 }));
   add('Tareas', () => emit({ type: 'notice', text: '¡Buen día! Para hoy tienes 2:\n• Enviar informe\n• Llamar a Ana' }));
-  const look = { size: 'm' as const, sound: false, name: '' };
+  const look = { size: 'm' as const, sound: false, name: '', style: '2d' as '2d' | '3d' };
+  add('3D / 2D', () => {
+    look.style = look.style === '3d' ? '2d' : '3d';
+    emit({ type: 'settings', ...look, coat: 'red', outfit: null });
+  });
   add('Navidad', () => emit({ type: 'settings', ...look, coat: 'red', outfit: 'santa' }));
   add('Halloween', () => emit({ type: 'settings', ...look, coat: 'blacktan', outfit: 'witch' }));
   add('Bufanda', () => emit({ type: 'settings', ...look, coat: 'dapple', outfit: 'scarf' }));

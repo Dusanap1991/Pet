@@ -1,5 +1,6 @@
 import { SIZE_SCALE, type PetBridge, type PetEvent, type PetReport, type PetSize } from '../shared/types';
 import { Ball } from './ball';
+import type { Dog3D } from './dog3d/dog3d';
 import { Bubble } from './bubble';
 import { DEMO_TASKBAR, setupDemo } from './demo';
 import { Dog, type World } from './dog/dog';
@@ -27,6 +28,50 @@ const demo = !bridge;
 const stage = document.getElementById('stage') as HTMLDivElement;
 const canvas = document.getElementById('dog') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+
+/** Perro en 3D: lienzo WebGL debajo del lienzo 2D (que sigue dibujando corazones, "z", gotas…). */
+let dog3d: Dog3D | null = null;
+let canvas3d: HTMLCanvasElement | null = null;
+let want3d = false;
+let loading3d = false;
+
+async function setStyle(style: '2d' | '3d'): Promise<void> {
+  want3d = style === '3d';
+  dog.style3d = want3d && !!dog3d;
+  if (!want3d) {
+    if (canvas3d) canvas3d.style.display = 'none';
+    return;
+  }
+  if (dog3d) {
+    canvas3d!.style.display = '';
+    dog.style3d = true;
+    return;
+  }
+  if (loading3d) return;
+  loading3d = true;
+  try {
+    const { Dog3D } = await import('./dog3d/dog3d');
+    canvas3d = document.createElement('canvas');
+    canvas3d.id = 'dog3d';
+    stage.insertBefore(canvas3d, canvas);
+    dog3d = new Dog3D(canvas3d);
+    dog3d.setLook(look.coat, look.outfit);
+    sizeCanvas();
+    dog.style3d = want3d;
+    if (!want3d) canvas3d.style.display = 'none';
+  } catch (err) {
+    // Sin WebGL (o si algo falla): se queda el dibujo 2D.
+    console.error('No se pudo iniciar el 3D:', err);
+    canvas3d?.remove();
+    canvas3d = null;
+    dog3d = null;
+    dog.style3d = false;
+  } finally {
+    loading3d = false;
+  }
+}
+
+const look: { coat: string; outfit: 'santa' | 'witch' | 'scarf' | null } = { coat: 'red', outfit: null };
 
 const fx = new Fx();
 const treats = new Treats(stage);
@@ -79,6 +124,11 @@ function sizeCanvas(): void {
   canvas.style.height = `${h}px`;
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
+  if (dog3d && canvas3d) {
+    canvas3d.style.width = `${w}px`;
+    canvas3d.style.height = `${h}px`;
+    dog3d.resize({ w: BOX_W, h: BOX_H, originX: ORIGIN_X, originY: ORIGIN_Y }, scale, dpr);
+  }
 }
 
 function setSize(size: PetSize): void {
@@ -130,6 +180,10 @@ function handle(e: PetEvent): void {
       setSize(e.size);
       soundOn = e.sound;
       dog.setLook(e.coat, e.outfit);
+      look.coat = e.coat;
+      look.outfit = e.outfit;
+      dog3d?.setLook(e.coat, e.outfit);
+      void setStyle(e.style);
       break;
     case 'eyes':
       // Regla 20-20-20: el globo se queda los 20 segundos y después da las gracias.
@@ -299,11 +353,17 @@ function frame(now: number): void {
   fx.update(dt);
   updateInteractivity(dt);
 
-  canvas.style.transform = `translate(${dog.x - ORIGIN_X * scale}px, ${dog.y - ORIGIN_Y * scale}px)`;
+  const boxTransform = `translate(${dog.x - ORIGIN_X * scale}px, ${dog.y - ORIGIN_Y * scale}px)`;
+  canvas.style.transform = boxTransform;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, BOX_W * scale, BOX_H * scale);
   ctx.translate(ORIGIN_X * scale, ORIGIN_Y * scale);
-  dog.draw(ctx);
+  if (dog3d && dog.style3d && canvas3d) {
+    canvas3d.style.transform = boxTransform;
+    dog3d.render(dog.view3d());
+  } else {
+    dog.draw(ctx);
+  }
   fx.draw(ctx);
 
   const head = dog.headOffset();

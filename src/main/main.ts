@@ -537,12 +537,13 @@ function registerPanelHandlers(): void {
     costumes: settings.costumes,
     coat: settings.coat,
     coats: COATS,
+    style: settings.style,
   }));
   handle('settings:set', ['settings'], (patch) => {
     if (typeof patch !== 'object' || patch === null) return false;
     const allowed = [
       'name', 'sound', 'calendarUrl', 'meetingLeadMin', 'dropFolder', 'deviceAlerts', 'taskNudges', 'quietInMeetings',
-      'shortcuts', 'endOfDay', 'endOfDayTime', 'weeklySummary', 'lateNight', 'eyeBreaks', 'weatherCity', 'costumes', 'coat',
+      'shortcuts', 'endOfDay', 'endOfDayTime', 'weeklySummary', 'lateNight', 'eyeBreaks', 'weatherCity', 'costumes', 'coat', 'style',
     ];
     const picked = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     const next = sanitizeSettings({ ...settings, ...picked });
@@ -774,7 +775,7 @@ function trayImage(): Electron.NativeImage {
 function updateSettings(patch: Partial<Settings>): void {
   settings = { ...settings, ...patch };
   saveSettings(settingsFile, settings);
-  if (['size', 'sound', 'name', 'coat', 'costumes', 'weatherPlace'].some((k) => k in patch)) sendSettings();
+  if (['size', 'sound', 'name', 'coat', 'costumes', 'weatherPlace', 'style'].some((k) => k in patch)) sendSettings();
   for (const w of Object.values(panels)) if (w && !w.isDestroyed()) w.webContents.send('settings:changed');
   refreshTray();
 }
@@ -782,7 +783,7 @@ function updateSettings(patch: Partial<Settings>): void {
 function sendSettings(): void {
   const south = isSouthern(Intl.DateTimeFormat().resolvedOptions().timeZone, settings.weatherPlace?.lat);
   const outfit = settings.costumes ? outfitFor(new Date(), south) : null;
-  send({ type: 'settings', size: settings.size, sound: settings.sound, name: settings.name, coat: settings.coat, outfit });
+  send({ type: 'settings', size: settings.size, sound: settings.sound, name: settings.name, coat: settings.coat, outfit, style: settings.style });
 }
 
 function sendMood(force = false): void {

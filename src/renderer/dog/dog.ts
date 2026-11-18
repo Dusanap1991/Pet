@@ -1,5 +1,6 @@
 import type { BallTarget } from '../ball';
 import type { Fx } from '../fx';
+import type { View3D } from '../dog3d/dog3d';
 import { COATS, DACHSHUND, drawDog, drawDogFront, frontHeight, type DrawExtras, type OutfitKind, type Palette } from './draw';
 import { LIE, SIT, SLEEP, STAND, approachPose, clonePose, type Pose } from './pose';
 
@@ -124,6 +125,10 @@ export class Dog {
   private frontOn = false;
   /** 0 = de lado, 1 = de frente (pasa por 0,5 como un giro de papel). */
   private front = 0;
+  /** Estilo de dibujo: el 3D cambia cómo cuelga y cómo cae de frente. */
+  style3d = false;
+  /** Giro hacia la cámara cuando está tranquilo (solo 3D): se ve de tres cuartos. */
+  private turn = 0;
   /** Lo soltaron estando de frente: cae y aterriza sentado mirando hacia afuera. */
   private frontFall = false;
   private frontSit = 0;
@@ -161,6 +166,40 @@ export class Dog {
   // ---------------------------------------------------------------- estado
 
   /** true si conviene dibujar a pocos cuadros por segundo. */
+  /** Cuánto se inclina al colgar del pellejo: en 3D casi vertical cuando ya mira de frente. */
+  private hangMax(): number {
+    return this.style3d ? HANG_MAX + 0.75 * this.front : HANG_MAX;
+  }
+
+  private yawNow(): number {
+    const fv = clamp(this.faceVis, -1, 1);
+    const side = -Math.acos(fv) - 0.5 * this.turn * (fv >= 0 ? 1 : -1) * (1 - this.front);
+    return side + (-Math.PI / 2 - side) * this.front;
+  }
+
+  /** Lo que necesita el renderizador 3D en este cuadro. */
+  view3d(): View3D {
+    const s = this.scale;
+    const yaw = this.yawNow();
+    const px = this.grabDX / (s * this.facing);
+    const py = this.grabDY / s;
+    // Mientras lo arrastran, el punto agarrado queda bajo el cursor aunque el perro gire.
+    const offsetX = this.state === 'drag' ? this.grabDX / s - px * Math.cos(yaw) : 0;
+    return {
+      pose: this.render,
+      breath: Math.sin(this.t * (this.posture === 'sleep' ? 1.7 : 2.8)) * (this.posture === 'sleep' ? 1.6 : 0.8),
+      wag: this.wagAmp * Math.sin(this.wagPhase),
+      wagLag: this.wagAmp * Math.sin(this.wagPhase - 0.9),
+      yaw,
+      tilt: this.hang * this.hangMax() - this.rot * this.facing,
+      pivotX: px,
+      pivotY: py,
+      offsetX,
+      squash: this.squash,
+      lift: (this.world.floorY - this.y) / s,
+    };
+  }
+
   get calm(): boolean {
     return this.state === 'idle' || this.state === 'sit' || this.state === 'lie' || this.state === 'sleep';
   }
@@ -299,7 +338,11 @@ export class Dog {
     this.vx = clamp(this.vx, -1500, 1500);
     this.vy = clamp(this.vy, -1500, 1500);
     this.frontFall = this.frontOn;
-    if (this.frontFall) {
+    if (this.frontFall && this.style3d) {
+      // En 3D el perro cuelga del punto agarrado: el apoyo pasa a quedar bajo ese punto.
+      this.x += this.grabDX * (1 - Math.abs(Math.cos(this.yawNow())));
+      this.grabDX = this.facing * SCRUFF_X * this.scale;
+    } else if (this.frontFall) {
       // De frente se dibuja desde los pies: el punto de apoyo pasa a estar bajo el perro colgado.
       this.x += this.grabDX;
       this.y = Math.min(this.y + this.grabDY + frontHeight(0) * this.scale, this.world.floorY);
@@ -410,7 +453,9 @@ export class Dog {
     else if (lift < FRONT_OFF) this.frontOn = false;
     if (this.state !== 'fall' && this.state !== 'land') this.frontFall = false;
     const ease = (rate: number): number => 1 - Math.exp(-rate * dt);
-    this.front += ((this.frontOn || this.frontFall ? 1 : 0) - this.front) * ease(14);
+    this.front += ((this.frontOn || this.frontFall ? 1 : 0) - this.front) * ease(this.style3d ? 7 : 14);
+    const relaxed = (this.state === 'idle' || this.state === 'sit' || this.state === 'lie' || this.state === 'happy' || this.state === 'bark' || this.state === 'yawn');
+    this.turn += ((relaxed ? 1 : 0) - this.turn) * ease(2.5);
     const held = this.state === 'drag';
     this.frontSit += ((held || this.state === 'fall' ? 0 : 1) - this.frontSit) * ease(16);
     this.frontScruff += ((held ? 1 : 0) - this.frontScruff) * ease(16);
@@ -653,6 +698,8 @@ export class Dog {
           this.vx = 0;
           this.vy = 0;
           this.enter('land', this.frontFall ? 1.3 : 0.4);
+          // En 3D cae sentado mirándote.
+          if (this.frontFall && this.style3d) this.posture = 'sit';
         }
         break;
       }
@@ -945,7 +992,7 @@ export class Dog {
       }
       case 'drag': {
         // Cuelga del pellejo: patas, orejas y cola caen hacia el suelo aunque el cuerpo esté inclinado.
-        const a = this.hang * HANG_MAX;
+        const a = this.hang * this.hangMax();
         const dx = -Math.sin(a), dy = Math.cos(a);
         const len = 21;
         const k = Math.sin(this.t * 9) * 3 * this.hang;
@@ -1104,7 +1151,7 @@ export class Dog {
       const py = this.grabDY / s;
       ctx.translate(px, py);
       // Cabeza arriba y cola abajo al colgar, más el balanceo por el movimiento.
-      ctx.rotate(this.rot * this.facing - this.hang * HANG_MAX);
+      ctx.rotate(this.rot * this.facing - this.hang * this.hangMax());
       ctx.translate(-px, -py);
     }
     drawDog(ctx, this.render, extras, this.palette);

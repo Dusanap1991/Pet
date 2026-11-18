@@ -21,6 +21,7 @@ interface PanelSettings {
   costumes: boolean;
   coat: string;
   coats: [string, string][];
+  style: string;
 }
 
 const set = (patch: Partial<PanelSettings>): Promise<unknown> => panel().invoke('settings:set', patch);
@@ -33,6 +34,7 @@ const checks = [
   'sound', 'deviceAlerts', 'taskNudges', 'quietInMeetings', 'shortcuts', 'endOfDay', 'weeklySummary', 'lateNight', 'eyeBreaks', 'costumes',
 ] as const;
 const coat = $<HTMLSelectElement>('coat');
+const style = $<HTMLSelectElement>('style');
 const endTime = $<HTMLInputElement>('endOfDayTime');
 const city = $<HTMLInputElement>('weatherCity');
 const weatherStatus = $<HTMLParagraphElement>('weather-status');
@@ -53,6 +55,7 @@ async function load(): Promise<void> {
   for (const key of checks) $<HTMLInputElement>(key).checked = s[key];
   if (coat.options.length === 0) for (const [id, label] of s.coats) coat.add(new Option(label, id));
   coat.value = s.coat;
+  style.value = s.style;
   if (document.activeElement !== endTime) endTime.value = s.endOfDayTime;
   endTime.disabled = !s.endOfDay;
   if (document.activeElement !== city) city.value = s.weatherCity;
@@ -68,6 +71,7 @@ async function load(): Promise<void> {
 
 name.addEventListener('change', () => void set({ name: name.value }));
 coat.addEventListener('change', () => void set({ coat: coat.value }));
+style.addEventListener('change', () => void set({ style: style.value }));
 endTime.addEventListener('change', () => void set({ endOfDayTime: endTime.value }));
 
 async function testWeather(): Promise<void> {

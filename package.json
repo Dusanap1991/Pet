@@ -17,10 +17,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/three": "^0.187.0",
     "electron": "^45.3.2",
     "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
     "ical.js": "^2.2.1",
+    "three": "^0.187.0",
     "typescript": "^7.0.2"
   },
   "build": {
