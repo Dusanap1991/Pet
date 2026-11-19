@@ -19,7 +19,7 @@
       "frames": 183,
       "fps": 24,
       "loop": true,
-      "anchorX": 260.94856089856665,
+      "anchorX": 260.8198861222162,
       "anchorY": 255.0
     },
     "correr": {
@@ -30,7 +30,7 @@
       "frames": 77,
       "fps": 24,
       "loop": true,
-      "anchorX": 264.2250851039609,
+      "anchorX": 264.02109233095126,
       "anchorY": 250.0
     },
     "sentarse": {
@@ -65,6 +65,39 @@
       "loop": false,
       "anchorX": 267.5517559814744,
       "anchorY": 248.0
+    },
+    "echado": {
+      "file": "echado.webm",
+      "poster": "echado.png",
+      "width": 496,
+      "height": 262,
+      "frames": 96,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 246.60899507210763,
+      "anchorY": 251.0
+    },
+    "dormir": {
+      "file": "dormir.webm",
+      "poster": "dormir.png",
+      "width": 468,
+      "height": 228,
+      "frames": 96,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 249.83527828773975,
+      "anchorY": 216.0
+    },
+    "olfatear": {
+      "file": "olfatear.webm",
+      "poster": "olfatear.png",
+      "width": 562,
+      "height": 226,
+      "frames": 81,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 296.31532728762335,
+      "anchorY": 211.0
     }
   },
   "dogLengthPx": 470,

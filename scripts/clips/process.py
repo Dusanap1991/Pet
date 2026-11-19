@@ -60,6 +60,14 @@ def key(frame, treadmill_top):
         h = frame.shape[0]
         mx, mn = f.max(axis=2), f.min(axis=2)
         top = int(treadmill_top * h)
+        # Dónde empieza la cinta en este cuadro: la primera fila (bajo la mitad) que es gris oscura
+        # en buena parte del ancho. Así el corte calza aunque la cinta salga más arriba o más abajo.
+        mx0, mn0 = f.max(axis=2), f.min(axis=2)
+        dark = ((mx0 - mn0) < 28) & (mx0 < 95)
+        frac = dark.mean(axis=1)
+        rows_dark = np.nonzero(frac[h // 2:] > 0.35)[0]
+        if len(rows_dark):
+            top = h // 2 + int(rows_dark[0]) - 2
         # En la zona de la cinta solo se quedan las patas: tonos café rojizos.
         brown = (r - np.maximum(g, b)) > 6
         rows = np.arange(h)[:, None] >= top

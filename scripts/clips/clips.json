@@ -50,6 +50,32 @@
       "end": 6.2,
       "kind": "once",
       "reverse": true
+    },
+    "echado": {
+      "src": "media/clips/07-echado.mp4",
+      "start": 0,
+      "end": 10,
+      "kind": "loop",
+      "minLen": 4,
+      "maxLen": 9.5
+    },
+    "dormir": {
+      "src": "media/clips/08-dormir.mp4",
+      "start": 11.5,
+      "end": 20,
+      "kind": "loop",
+      "minLen": 4,
+      "maxLen": 8.5
+    },
+    "olfatear": {
+      "src": "media/clips/09-olfatear.mp4",
+      "start": 20.4,
+      "end": 28.8,
+      "kind": "loop",
+      "treadmillTop": 0.8,
+      "stabilize": true,
+      "minLen": 2,
+      "maxLen": 8
     }
   }
 }

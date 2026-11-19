@@ -29,14 +29,18 @@ export interface VideoView {
   pivotY: number;
 }
 
-const WALK: DogState[] = ['walk', 'sniff', 'carry', 'pickup'];
+const WALK: DogState[] = ['walk', 'carry', 'pickup'];
+/** Fundido cuando se pasa de un video a otro sin transición filmada. */
+const FADE_MS = 280;
+
+type Pose = 'stand' | 'sit' | 'lie';
 const RUN: DogState[] = ['run', 'fetch', 'chase'];
 
 export class DogVideo {
   private readonly videos = new Map<ClipName, HTMLVideoElement>();
   private current: ClipName | null = null;
   /** Pose que se ve ahora (de pie o sentado), para saber si hace falta una transición. */
-  private shownPose: 'stand' | 'sit' = 'stand';
+  private shownPose: Pose = 'stand';
   private transition: { clip: ClipName; then: ClipName } | null = null;
   private visible = true;
 
@@ -70,14 +74,19 @@ export class DogVideo {
   }
 
   private target(view: VideoView): ClipName {
+    if (view.state === 'sniff') return 'olfatear';
     if (WALK.includes(view.state)) return 'caminar';
     if (RUN.includes(view.state)) return 'correr';
-    if (view.posture !== 'stand') return 'sentado';
+    if (view.posture === 'sleep') return 'dormir';
+    if (view.posture === 'lie') return 'echado';
+    if (view.posture === 'sit') return 'sentado';
     return 'quieto';
   }
 
-  private poseOf(clip: ClipName): 'stand' | 'sit' {
-    return clip === 'sentado' || clip === 'sentarse' ? 'sit' : 'stand';
+  private poseOf(clip: ClipName): Pose {
+    if (clip === 'sentado' || clip === 'sentarse') return 'sit';
+    if (clip === 'echado' || clip === 'dormir') return 'lie';
+    return 'stand';
   }
 
   private play(name: ClipName, rate = 1): void {
@@ -88,8 +97,19 @@ export class DogVideo {
     if (!manifest.clips[name].loop) next.currentTime = 0;
     next.style.visibility = 'visible';
     if (prev) {
-      prev.style.visibility = 'hidden';
-      prev.pause();
+      // Fundido corto: el nuevo aparece encima mientras el anterior se desvanece.
+      next.style.transition = 'none';
+      next.style.opacity = '0';
+      void next.offsetWidth;
+      next.style.transition = `opacity ${FADE_MS}ms ease`;
+      next.style.opacity = '1';
+      prev.style.transition = `opacity ${FADE_MS}ms ease`;
+      prev.style.opacity = '0';
+      setTimeout(() => {
+        if (this.current !== name) return;
+        prev.style.visibility = 'hidden';
+        prev.pause();
+      }, FADE_MS);
     }
     this.current = name;
     if (this.visible) void next.play().catch(() => {});
@@ -116,11 +136,14 @@ export class DogVideo {
       this.play('quieto');
     } else if (!this.transition) {
       const wantPose = this.poseOf(want);
-      if (wantPose !== this.shownPose) {
-        const clip: ClipName = wantPose === 'sit' ? 'sentarse' : 'levantarse';
+      // De pie ↔ sentado o echado: se usa el video de sentarse o levantarse. Entre sentado
+      // y echado no hay transición filmada: basta el fundido.
+      if (wantPose !== this.shownPose && (wantPose === 'stand' || this.shownPose === 'stand')) {
+        const clip: ClipName = wantPose === 'stand' ? 'levantarse' : 'sentarse';
         this.transition = { clip, then: want };
         this.play(clip, TRANSITION_RATE);
       } else {
+        this.shownPose = wantPose;
         this.play(want);
       }
     }
