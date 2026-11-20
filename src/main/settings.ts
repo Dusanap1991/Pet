@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { Coat, DogStyle, PetSize } from '../shared/types';
+import type { Ambient, Coat, DogStyle, PetSize } from '../shared/types';
 
 export interface Settings {
   size: PetSize;
@@ -36,6 +36,11 @@ export interface Settings {
   costumes: boolean;
   coat: Coat;
   style: DogStyle;
+  /** Vasos de agua al día. */
+  waterGoal: number;
+  ambient: Ambient;
+  /** El sonido ambiente solo suena durante el foco. */
+  ambientFocusOnly: boolean;
   /** Pantalla donde vive el perro; sin valor, la principal. */
   displayId?: number;
 }
@@ -66,7 +71,12 @@ export const DEFAULT_SETTINGS: Settings = {
   costumes: true,
   coat: 'red',
   style: 'photo',
+  waterGoal: 8,
+  ambient: 'off',
+  ambientFocusOnly: true,
 };
+
+export const WATER_GOALS = [6, 8, 10, 12] as const;
 
 export const COATS: [Coat, string][] = [
   ['red', 'Colorado'],
@@ -116,6 +126,9 @@ export function sanitizeSettings(raw: unknown): Settings {
   }
   if (COATS.some(([id]) => id === r.coat)) out.coat = r.coat as Coat;
   if (r.style === '2d' || r.style === '3d' || r.style === 'photo') out.style = r.style;
+  if (typeof r.waterGoal === 'number' && (WATER_GOALS as readonly number[]).includes(r.waterGoal)) out.waterGoal = r.waterGoal;
+  if (r.ambient === 'off' || r.ambient === 'rain' || r.ambient === 'waves' || r.ambient === 'brown') out.ambient = r.ambient;
+  if (typeof r.ambientFocusOnly === 'boolean') out.ambientFocusOnly = r.ambientFocusOnly;
   if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;
 }

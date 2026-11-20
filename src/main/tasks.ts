@@ -99,6 +99,12 @@ export class TaskNudger {
     return 'reminder';
   }
 
+  /** Ya hablaron hoy de las tareas (por ejemplo, recién anotaste una): sin saludo de la mañana. */
+  markGreeted(now: number): void {
+    this.lastDay = dayKey(now);
+    this.postpone(now);
+  }
+
   /** Recién agregaste o marcaste algo: no hace falta recordártelo pronto. */
   postpone(now: number): void {
     this.nextAt = Math.max(this.nextAt, now + this.everyMin * 60_000);

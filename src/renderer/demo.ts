@@ -52,6 +52,9 @@ export function setupDemo(emit: (e: PetEvent) => void): void {
   add('Bufanda', () => emit({ type: 'settings', ...look, coat: 'dapple', outfit: 'scarf' }));
   add('Sin disfraz', () => emit({ type: 'settings', ...look, coat: 'red', outfit: null }));
   add('Vista 20-20-20', () => emit({ type: 'eyes' }));
+  add('Estirarse', () => emit({ type: 'stretch' }));
+  add('Ven aquí', () => emit({ type: 'come', x: 150 }));
+  add('Lluvia', () => emit({ type: 'ambient', kind: 'rain' }));
   add('Fondo claro/oscuro', () => document.body.classList.toggle('dark'));
 
   document.body.appendChild(panel);

@@ -3,6 +3,9 @@ export class Bubble {
   private el: HTMLDivElement;
   private hideAt = 0;
   private shown = false;
+  /** Último mensaje mostrado y cuándo (para no taparlo con la cuenta regresiva de la rutina). */
+  text = '';
+  saidAt = 0;
   private w = 0;
   private h = 0;
 
@@ -14,6 +17,8 @@ export class Bubble {
 
   say(text: string, ms = 4000): void {
     this.el.textContent = text;
+    this.text = text;
+    this.saidAt = performance.now();
     this.el.classList.add('show');
     this.shown = true;
     this.hideAt = performance.now() + ms;

@@ -177,3 +177,91 @@
   filter: grayscale(1);
   opacity: 0.45;
 }
+
+.habits {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.habits li {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 2px;
+  border-top: 1px solid var(--line);
+}
+
+.habits li:first-child {
+  border-top: 0;
+}
+
+.habits label {
+  display: contents;
+  cursor: pointer;
+}
+
+.dots {
+  display: flex;
+  gap: 3px;
+}
+
+.dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.dots i.on {
+  background: var(--accent);
+}
+
+.streak {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 46px;
+  text-align: right;
+}
+
+.moods {
+  display: flex;
+  gap: 8px;
+}
+
+.moods button {
+  flex: 1;
+  font-size: 24px;
+  padding: 8px 0;
+  border-radius: 10px;
+  filter: grayscale(0.7);
+  opacity: 0.75;
+}
+
+.moods button[aria-checked="true"] {
+  filter: none;
+  opacity: 1;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.bar .mood {
+  font-size: 13px;
+  line-height: 1;
+  min-height: 13px;
+}
+
+.stat .goal {
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.stat .goal i {
+  display: block;
+  height: 100%;
+  background: #3d8fd6;
+}

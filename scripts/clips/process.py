@@ -123,6 +123,35 @@ def clean(alpha):
     return out
 
 
+MASK_CELL = 6
+
+
+def write_mask(name, alphas):
+    """Guarda en <clip>.mask.json la silueta de cada cuadro (en celdas de MASK_CELL px) y dónde
+    están la cabeza (punto más alto) y la nariz (punto más adelantado de la mitad de arriba)."""
+    import base64
+    n, h, w = alphas.shape
+    cols, rows = (w + MASK_CELL - 1) // MASK_CELL, (h + MASK_CELL - 1) // MASK_CELL
+    frames, heads, noses = [], [], []
+    for a in alphas:
+        pad = np.zeros((rows * MASK_CELL, cols * MASK_CELL), np.float32)
+        pad[:h, :w] = a
+        cells = pad.reshape(rows, MASK_CELL, cols, MASK_CELL).mean(axis=(1, 3)) > 0.25
+        frames.append(base64.b64encode(np.packbits(cells.flatten()).tobytes()).decode())
+        ys, xs = np.nonzero(a > 0.5)
+        if len(ys) == 0:
+            heads.append([w / 2, 0]); noses.append([w, h / 2]); continue
+        top = ys.min()
+        heads.append([float(np.median(xs[ys <= top + 6])), float(top)])
+        upper = ys < top + (ys.max() - top) * 0.45
+        k = np.argmax(np.where(upper, xs, -1))
+        noses.append([float(xs[k]), float(ys[k])])
+    with open(os.path.join(OUT_DIR, f'{name}.mask.json'), 'w') as fh:
+        json.dump({'cell': MASK_CELL, 'cols': int(cols), 'rows': int(rows), 'frames': frames,
+                   'head': [[round(x, 1), round(y, 1)] for x, y in heads],
+                   'nose': [[round(x, 1), round(y, 1)] for x, y in noses]}, fh, separators=(',', ':'))
+
+
 def smooth(values, win):
     k = np.ones(win) / win
     pad = np.pad(values, (win // 2, win - 1 - win // 2), mode='edge')
@@ -226,6 +255,9 @@ def process(name, spec, fps):
         shutil.copy(os.path.join(tmp, '0000.png'), os.path.join(OUT_DIR, f'{name}.png'))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+    # Silueta por cuadro (para saber dónde se puede hacer clic) y puntos de la cabeza y la nariz.
+    write_mask(name, alphas[:, y0:y1, x0:x1])
 
     size = os.path.getsize(os.path.join(OUT_DIR, f'{name}.webm'))
     print(f'  → assets/dog/{name}.webm  {x1 - x0}x{y1 - y0}, {len(rgbs)} cuadros, {size / 1024:.0f} KB')

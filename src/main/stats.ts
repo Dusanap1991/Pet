@@ -13,6 +13,10 @@ export interface DayStats {
   tasksDone: number;
   pets: number;
   treats: number;
+  /** Rutinas de estiramiento completas. */
+  stretches: number;
+  /** Cómo estuvo el día (1 a 5; 0 = sin marcar). */
+  moodScore: number;
 }
 
 export type StatKey = Exclude<keyof DayStats, 'activeSec'>;
@@ -22,7 +26,7 @@ export const STREAK_MIN_SEC = 15 * 60;
 const KEEP_DAYS = 60;
 
 export const EMPTY_DAY: DayStats = {
-  activeSec: 0, breaks: 0, focusSessions: 0, focusMin: 0, water: 0, tasksDone: 0, pets: 0, treats: 0,
+  activeSec: 0, breaks: 0, focusSessions: 0, focusMin: 0, water: 0, tasksDone: 0, pets: 0, treats: 0, stretches: 0, moodScore: 0,
 };
 
 function sanitizeDay(raw: unknown): DayStats | null {
@@ -67,6 +71,12 @@ export class StatsStore {
 
   add(now: number, key: StatKey, amount = 1): void {
     this.day(now)[key] += amount;
+    this.dirty = true;
+  }
+
+  /** Cómo estuvo el día (1 a 5). */
+  setMood(now: number, score: number): void {
+    this.day(now).moodScore = Math.max(0, Math.min(5, Math.round(score)));
     this.dirty = true;
   }
 

@@ -6,7 +6,7 @@ import { Bubble } from './bubble';
 import { DEMO_TASKBAR, setupDemo } from './demo';
 import { Dog, type World } from './dog/dog';
 import { Fx } from './fx';
-import { bark } from './sound';
+import { bark, setAmbient } from './sound';
 import { STR } from './strings';
 import { Treats } from './treats';
 
@@ -14,7 +14,7 @@ declare global {
   interface Window {
     pet?: PetBridge;
     /** Solo en la vista previa: acceso para pruebas. */
-    __pet?: { dog: Dog; emit: (e: PetEvent) => void; ball: () => Ball | null; reports: PetReport[] };
+    __pet?: { dog: Dog; emit: (e: PetEvent) => void; ball: () => Ball | null; reports: PetReport[]; hit: (x: number, y: number) => boolean };
   }
 }
 
@@ -35,6 +35,11 @@ let dog3d: Dog3D | null = null;
 let canvas3d: HTMLCanvasElement | null = null;
 let want3d = false;
 let loading3d = false;
+
+/** ¿El punto cae sobre el perro? En el estilo realista se usa la silueta del video. */
+function hitDog(x: number, y: number): boolean {
+  return photo && dogVideo ? dogVideo.hitTest(x, y) : dog.hitTest(x, y);
+}
 
 /** Perro realista: videos de un perro de verdad, debajo del lienzo 2D. */
 let dogVideo: DogVideo | null = null;
@@ -93,6 +98,54 @@ let ball: Ball | null = null;
 /** Cuándo fue el último aviso de agua: un clic en el perro poco después cuenta como "ya tomé". */
 let waterAskedAt = 0;
 const reports: PetReport[] = [];
+/** Cuándo avisó del descanso: un clic en el perro poco después empieza la rutina de estiramiento. */
+let breakAskedAt = 0;
+/** Rutina de estiramiento en curso. */
+let routine: { step: number; left: number; timer: number } | null = null;
+
+function stopRoutine(done: boolean): void {
+  if (!routine) return;
+  clearInterval(routine.timer);
+  routine = null;
+  if (done) {
+    dog.remind(STR.stretchDone, 5000);
+    report('stretched');
+  } else {
+    dog.remind(STR.stretchStop, 4000);
+  }
+}
+
+/** Rutina guiada de 2 minutos: un paso a la vez, con cuenta regresiva en el globo. */
+function startRoutine(): void {
+  if (routine) return;
+  breakAskedAt = 0;
+  const steps = STR.stretchSteps;
+  const show = (): void => {
+    if (!routine) return;
+    const [text] = steps[routine.step];
+    // Si llegó otro mensaje (un hábito, un aviso), se deja leer unos segundos antes de volver a la rutina.
+    if (!bubble.text.startsWith('🧘') && performance.now() - bubble.saidAt < 4000) return;
+    bubble.say(`🧘 ${routine.step + 1}/${steps.length} · ${text}\n${routine.left} s`, 2000);
+  };
+  routine = {
+    step: 0,
+    left: steps[0][1],
+    timer: window.setInterval(() => {
+      if (!routine) return;
+      routine.left--;
+      if (routine.left <= 0) {
+        routine.step++;
+        if (routine.step >= steps.length) return stopRoutine(true);
+        routine.left = steps[routine.step][1];
+        dog.stretchAlong();
+        if (soundOn) bark(1, 0.12);
+      }
+      show();
+    }, 1000),
+  };
+  dog.stretchAlong();
+  show();
+}
 
 function report(kind: PetReport): void {
   if (demo) reports.push(kind);
@@ -161,6 +214,7 @@ function handle(e: PetEvent): void {
       break;
     case 'break-due':
       remind(STR.breakDue(e.minutes));
+      breakAskedAt = performance.now();
       break;
     case 'focus-start':
       dog.focusStart(STR.focusStart(e.minutes));
@@ -198,6 +252,15 @@ function handle(e: PetEvent): void {
       // Regla 20-20-20: el globo se queda los 20 segundos y después da las gracias.
       remind('👀 Mira algo lejano por 20 segundos…', 20_000);
       setTimeout(() => dog.remind('¡Listo! Tus ojos te lo agradecen.', 3500), 20_500);
+      break;
+    case 'stretch':
+      startRoutine();
+      break;
+    case 'ambient':
+      setAmbient(e.kind);
+      break;
+    case 'come':
+      dog.comeTo(e.x);
       break;
     case 'mood':
       dog.setMood(e.joy, e.food);
@@ -269,7 +332,7 @@ window.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     return;
   }
-  if (!dog.hitTest(e.clientX, e.clientY)) return;
+  if (!hitDog(e.clientX, e.clientY)) return;
   if (e.button === 2) {
     bridge?.showMenu();
     return;
@@ -294,6 +357,14 @@ function endPress(): void {
     dog.release();
     bridge?.setDragging(false);
   } else {
+    if (routine) {
+      stopRoutine(false);
+      return endPressReset();
+    }
+    if (breakAskedAt && performance.now() - breakAskedAt < 120_000) {
+      startRoutine();
+      return endPressReset();
+    }
     bubble.dismiss();
     dog.pet();
     report('pet');
@@ -306,6 +377,11 @@ function endPress(): void {
   dragging = false;
 }
 
+function endPressReset(): void {
+  pressing = false;
+  dragging = false;
+}
+
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('pointerup', endPress);
 window.addEventListener('pointercancel', endPress);
@@ -313,7 +389,7 @@ window.addEventListener('blur', endPress);
 
 /** Decide si la ventana debe atrapar clics: solo cuando el cursor está sobre el perro. */
 function updateInteractivity(dt: number): void {
-  const overDog = world.cursorKnown && dog.hitTest(world.cursorX, world.cursorY);
+  const overDog = world.cursorKnown && hitDog(world.cursorX, world.cursorY);
   const overBall = world.cursorKnown && !!ball && ball.hitTest(world.cursorX, world.cursorY);
   const over = overDog || overBall;
   const want = pressing || holdingBall || over;
@@ -369,6 +445,12 @@ function frame(now: number): void {
   ctx.translate(ORIGIN_X * scale, ORIGIN_Y * scale);
   if (photo && dogVideo) {
     dogVideo.update(dog.videoView(), dog.x, dog.y, scale);
+    const lm = dogVideo.landmarks();
+    if (lm) {
+      // Globos y corazones sobre la cabeza real; la pelota y las migas, en la boca real.
+      dog.headHint = { x: lm.head.x - dog.x, y: lm.head.y - dog.y + 14 * scale };
+      dog.mouthHint = { x: lm.nose.x - dog.x - 6 * scale * dog.facing, y: lm.nose.y - dog.y + 7 * scale };
+    }
     dog.drawShadow(ctx);
   } else if (dog3d && dog.style3d && canvas3d) {
     canvas3d.style.transform = boxTransform;
@@ -419,7 +501,7 @@ if (bridge) {
   watchBattery();
 } else {
   setupDemo(handle);
-  window.__pet = { dog, emit: handle, ball: () => ball, reports };
+  window.__pet = { dog, emit: handle, ball: () => ball, reports, hit: hitDog };
 }
 
 requestAnimationFrame(frame);

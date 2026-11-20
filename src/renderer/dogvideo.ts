@@ -7,10 +7,54 @@
  * Los videos salen de scripts/clips/process.py (ver media/clips/LEEME.md).
  */
 import manifest from '../../assets/dog/manifest.json';
+import m_quieto from '../../assets/dog/quieto.mask.json';
+import m_caminar from '../../assets/dog/caminar.mask.json';
+import m_correr from '../../assets/dog/correr.mask.json';
+import m_sentarse from '../../assets/dog/sentarse.mask.json';
+import m_sentado from '../../assets/dog/sentado.mask.json';
+import m_levantarse from '../../assets/dog/levantarse.mask.json';
+import m_echado from '../../assets/dog/echado.mask.json';
+import m_dormir from '../../assets/dog/dormir.mask.json';
+import m_olfatear from '../../assets/dog/olfatear.mask.json';
 import type { DogState } from './dog/dog';
 
 type ClipName = keyof typeof manifest.clips;
 type Clip = (typeof manifest.clips)[ClipName];
+
+/** Silueta real del perro en cada cuadro (celdas de `cell` px) y dónde están su cabeza y su nariz. */
+interface Mask {
+  cell: number;
+  cols: number;
+  rows: number;
+  frames: string[];
+  head: number[][];
+  nose: number[][];
+}
+
+const MASKS: Record<ClipName, Mask> = {
+  quieto: m_quieto,
+  caminar: m_caminar,
+  correr: m_correr,
+  sentarse: m_sentarse,
+  sentado: m_sentado,
+  levantarse: m_levantarse,
+  echado: m_echado,
+  dormir: m_dormir,
+  olfatear: m_olfatear,
+};
+const decoded = new Map<string, Uint8Array>();
+function bits(name: ClipName, frame: number): Uint8Array {
+  const key = `${name}:${frame}`;
+  let out = decoded.get(key);
+  if (!out) {
+    const raw = atob(MASKS[name].frames[frame]);
+    out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    if (decoded.size > 4000) decoded.clear();
+    decoded.set(key, out);
+  }
+  return out;
+}
 
 /** Largo del perro (cola a nariz) en unidades del dibujo: así mide lo mismo que en los otros estilos. */
 const DOG_LENGTH_UNITS = 175;
@@ -29,9 +73,11 @@ export interface VideoView {
   pivotY: number;
 }
 
-const WALK: DogState[] = ['walk', 'carry', 'pickup'];
+const WALK: DogState[] = ['walk', 'carry'];
+/** Con la nariz en el suelo: olfatear, comer, recoger la pelota. */
+const NOSE_DOWN: DogState[] = ['sniff', 'eat', 'pickup'];
 /** Fundido cuando se pasa de un video a otro sin transición filmada. */
-const FADE_MS = 280;
+const FADE_MS = 160;
 
 type Pose = 'stand' | 'sit' | 'lie';
 const RUN: DogState[] = ['run', 'fetch', 'chase'];
@@ -43,6 +89,8 @@ export class DogVideo {
   private shownPose: Pose = 'stand';
   private transition: { clip: ClipName; then: ClipName } | null = null;
   private visible = true;
+  /** Cómo quedó ubicado el video en el último cuadro (para pasar de pantalla a video y viceversa). */
+  private place = { left: 0, top: 0, k: 1, flip: false, squash: 1, tilt: 0, px: 0, py: 0 };
 
   constructor(parent: HTMLElement, before: Element | null, base: string) {
     for (const name of Object.keys(manifest.clips) as ClipName[]) {
@@ -73,8 +121,58 @@ export class DogVideo {
     }
   }
 
+  private frameOf(name: ClipName): number {
+    const v = this.videos.get(name)!;
+    const n = MASKS[name].frames.length;
+    return Math.min(n - 1, Math.max(0, Math.floor(v.currentTime * manifest.clips[name].fps))) % n;
+  }
+
+  /** Del video (px del recorte) a la pantalla. */
+  private toScreen(u: number, w: number): { x: number; y: number } {
+    const p = this.place;
+    const x = p.flip ? p.left - u * p.k : p.left + u * p.k;
+    const y = p.top + w * p.k * p.squash;
+    const c = Math.cos(p.tilt), s = Math.sin(p.tilt);
+    return { x: p.px + (x - p.px) * c - (y - p.py) * s, y: p.py + (x - p.px) * s + (y - p.py) * c };
+  }
+
+  /** ¿Hay perro en este punto de la pantalla? Usa la silueta real del cuadro que se ve ahora. */
+  hitTest(sx: number, sy: number, pad = 4): boolean {
+    const name = this.current;
+    if (!name || !this.visible) return false;
+    const p = this.place;
+    const c = Math.cos(-p.tilt), s = Math.sin(-p.tilt);
+    const x = p.px + (sx - p.px) * c - (sy - p.py) * s;
+    const y = p.py + (sx - p.px) * s + (sy - p.py) * c;
+    const u = p.flip ? (p.left - x) / p.k : (x - p.left) / p.k;
+    const w = (y - p.top) / (p.k * p.squash);
+    const m = MASKS[name];
+    const data = bits(name, this.frameOf(name));
+    const r = Math.max(0, Math.ceil(pad / (p.k * m.cell)));
+    const cx = Math.floor(u / m.cell), cy = Math.floor(w / m.cell);
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const col = cx + dx, row = cy + dy;
+        if (col < 0 || row < 0 || col >= m.cols || row >= m.rows) continue;
+        const i = row * m.cols + col;
+        if (data[i >> 3] & (0x80 >> (i & 7))) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Lo alto de la cabeza y la punta de la nariz, en pantalla (para globos, corazones y la boca). */
+  landmarks(): { head: { x: number; y: number }; nose: { x: number; y: number } } | null {
+    const name = this.current;
+    if (!name) return null;
+    const f = this.frameOf(name);
+    const [hx, hy] = MASKS[name].head[f];
+    const [nx, ny] = MASKS[name].nose[f];
+    return { head: this.toScreen(hx, hy), nose: this.toScreen(nx, ny) };
+  }
+
   private target(view: VideoView): ClipName {
-    if (view.state === 'sniff') return 'olfatear';
+    if (NOSE_DOWN.includes(view.state)) return 'olfatear';
     if (WALK.includes(view.state)) return 'caminar';
     if (RUN.includes(view.state)) return 'correr';
     if (view.posture === 'sleep') return 'dormir';
@@ -155,6 +253,7 @@ export class DogVideo {
     const left = flip ? x + clip.anchorX * k : x - clip.anchorX * k;
     const top = y - clip.anchorY * k * view.squash;
     const px = x + view.pivotX, py = y + view.pivotY;
+    this.place = { left, top, k, flip, squash: view.squash, tilt: view.tilt, px, py };
     const v = this.videos.get(name)!;
     v.style.transform =
       `translate(${px}px, ${py}px) rotate(${view.tilt}rad) translate(${-px}px, ${-py}px) ` +

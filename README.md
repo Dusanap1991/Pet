@@ -49,7 +49,15 @@ Para Windows y macOS.
 - **Descanso de la vista** (opcional): regla 20-20-20, cada 20 minutos.
 - **Clima de la mañana**: con tu ciudad en Ajustes, te cuenta el pronóstico al
   llegar (con Open-Meteo, gratis y sin cuenta).
-- **Logros**: 19 medallas en "Mi día" (rachas, vasos de agua, focos, tareas…).
+- **Rutina de estiramiento**: 2 minutos guiados, paso a paso con cuenta regresiva.
+  Empieza desde el menú o haciendo clic en el perro cuando te avisa de un descanso.
+- **Sonido ambiente**: lluvia, olas o ruido marrón (generados, sin archivos), solo
+  durante el foco o siempre.
+- **Meta de agua, hábitos y ánimo**: en "Mi día" ves cuántos vasos llevas de tu meta,
+  marcas tus hábitos (con su racha) y cuentas cómo estuvo tu día.
+- **Ven aquí**: `Control` + `Alt` + `V` (o desde el menú) y el perro corre hasta el
+  cursor, incluso si está en otra pantalla.
+- **Logros**: 22 medallas en "Mi día" (rachas, vasos de agua, focos, tareas…).
 - **Juega y hace gracias**: si mueves el mouse rápido cerca del suelo, hace una
   reverencia y lo persigue; además bosteza, se estira, se sacude y persigue su cola.
   De noche está más dormilón.

@@ -1,7 +1,7 @@
 /** Logros: contadores de toda la vida y medallas que se desbloquean una vez. */
 import { readJson, writeJson } from './store';
 
-export type Counter = 'pets' | 'water' | 'focus' | 'tasks' | 'treats' | 'play' | 'pomodoros' | 'reminders' | 'early' | 'files';
+export type Counter = 'pets' | 'water' | 'focus' | 'tasks' | 'treats' | 'play' | 'pomodoros' | 'reminders' | 'early' | 'files' | 'stretches' | 'waterGoals' | 'habits';
 
 export interface Achievement {
   id: string;
@@ -32,6 +32,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'play-20', icon: '🎾', title: 'Buscador', hint: 'Juega 20 veces a la pelota', counter: 'play', goal: 20 },
   { id: 'reminders-10', icon: '⏰', title: 'Memoria de elefante', hint: '10 recordatorios cumplidos', counter: 'reminders', goal: 10 },
   { id: 'early', icon: '🌅', title: 'Madrugador', hint: 'Llegar antes de las 8:00', counter: 'early', goal: 1 },
+  { id: 'stretch-10', icon: '🧘', title: 'Flexible', hint: '10 rutinas de estiramiento', counter: 'stretches', goal: 10 },
+  { id: 'water-goal-7', icon: '🏅', title: 'Siempre hidratado', hint: 'Cumple la meta de agua 7 días', counter: 'waterGoals', goal: 7 },
+  { id: 'habits-30', icon: '🌱', title: 'Constante', hint: 'Marca 30 hábitos cumplidos', counter: 'habits', goal: 30 },
   { id: 'files-10', icon: '📦', title: 'Ordenado', hint: 'Ordena 10 archivos con el perro', counter: 'files', goal: 10 },
 ];
 

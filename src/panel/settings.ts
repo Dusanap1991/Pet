@@ -22,6 +22,8 @@ interface PanelSettings {
   coat: string;
   coats: [string, string][];
   style: string;
+  waterGoal: number;
+  waterGoals: number[];
 }
 
 const set = (patch: Partial<PanelSettings>): Promise<unknown> => panel().invoke('settings:set', patch);
@@ -35,12 +37,13 @@ const checks = [
 ] as const;
 const coat = $<HTMLSelectElement>('coat');
 const style = $<HTMLSelectElement>('style');
+const waterGoal = $<HTMLSelectElement>('waterGoal');
 const endTime = $<HTMLInputElement>('endOfDayTime');
 const city = $<HTMLInputElement>('weatherCity');
 const weatherStatus = $<HTMLParagraphElement>('weather-status');
 
 // En Mac la tecla se llama Opción.
-if (navigator.platform.toLowerCase().includes('mac')) for (const id of ['alt1', 'alt2', 'alt3']) $(id).textContent = '⌥ Opción';
+if (navigator.platform.toLowerCase().includes('mac')) for (const id of ['alt1', 'alt2', 'alt3', 'alt4']) $(id).textContent = '⌥ Opción';
 
 function showStatus(text: string, kind: 'ok' | 'error' | '' = ''): void {
   status.textContent = text;
@@ -56,6 +59,8 @@ async function load(): Promise<void> {
   if (coat.options.length === 0) for (const [id, label] of s.coats) coat.add(new Option(label, id));
   coat.value = s.coat;
   style.value = s.style;
+  if (waterGoal.options.length === 0) for (const n of s.waterGoals) waterGoal.add(new Option(String(n), String(n)));
+  waterGoal.value = String(s.waterGoal);
   if (document.activeElement !== endTime) endTime.value = s.endOfDayTime;
   endTime.disabled = !s.endOfDay;
   if (document.activeElement !== city) city.value = s.weatherCity;
@@ -72,6 +77,7 @@ async function load(): Promise<void> {
 name.addEventListener('change', () => void set({ name: name.value }));
 coat.addEventListener('change', () => void set({ coat: coat.value }));
 style.addEventListener('change', () => void set({ style: style.value }));
+waterGoal.addEventListener('change', () => void set({ waterGoal: Number(waterGoal.value) }));
 endTime.addEventListener('change', () => void set({ endOfDayTime: endTime.value }));
 
 async function testWeather(): Promise<void> {

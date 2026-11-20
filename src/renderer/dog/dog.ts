@@ -130,6 +130,11 @@ export class Dog {
   style3d = false;
   /** Estilo realista (video): sin vista de frente y con velocidades que calcen con los videos. */
   photo = false;
+  /** En el estilo realista, dónde está de verdad la cabeza y la boca (relativo al punto de apoyo). */
+  headHint: { x: number; y: number } | null = null;
+  /** Lo llamaron ("Ven aquí"): corre hasta esta x. */
+  private comeX: number | null = null;
+  mouthHint: { x: number; y: number } | null = null;
   /** Giro hacia la cámara cuando está tranquilo (solo 3D): se ve de tres cuartos. */
   private turn = 0;
   /** Lo soltaron estando de frente: cae y aterriza sentado mirando hacia afuera. */
@@ -247,6 +252,7 @@ export class Dog {
 
   /** Posición de la cabeza respecto del punto de apoyo, en píxeles. */
   headOffset(): { x: number; y: number } {
+    if (this.photo && this.headHint) return this.headHint;
     return { x: this.pose.headX * this.facing * this.scale, y: this.pose.headY * this.scale };
   }
 
@@ -307,6 +313,25 @@ export class Dog {
   setMood(joy: number, food: number): void {
     this.joy = joy;
     this.food = food;
+  }
+
+  /** "Ven aquí": corre hasta quedar junto al cursor. */
+  comeTo(x: number): void {
+    if (this.state === 'drag' || this.state === 'fall') return;
+    const [lo, hi] = this.bounds();
+    const side = x >= this.x ? 1 : -1;
+    // Se detiene con la cabeza junto al cursor, no encima.
+    this.comeX = clamp(x - side * 60 * this.scale, lo, hi);
+    this.goalTreat = null;
+    this.awayMode = false;
+    this.enter('run');
+    this.posture = 'stand';
+  }
+
+  /** Durante la rutina de estiramiento: se estira o se queda tranquilo a tu lado. */
+  stretchAlong(): void {
+    if (this.state === 'drag' || this.state === 'fall') return;
+    this.enter('stretch', 2);
   }
 
   /** Algo nuevo se acerca (por ejemplo, archivos arrastrados): se pone atento. */
@@ -557,6 +582,17 @@ export class Dog {
 
       case 'run': {
         const treat = this.goalTreat;
+        if (!treat && this.comeX !== null) {
+          this.targetX = this.comeX;
+          if (this.moveToward(dt, 200)) {
+            this.comeX = null;
+            const w = this.world;
+            if (w.cursorKnown) this.facing = w.cursorX >= this.x ? 1 : -1;
+            this.enter('happy', 1.4);
+            this.spawnHeart();
+          }
+          break;
+        }
         if (!treat) {
           this.enter('idle', 1);
           break;
@@ -881,6 +917,7 @@ export class Dog {
   }
 
   private mouthOffset(): { x: number; y: number } {
+    if (this.photo && this.mouthHint) return this.mouthHint;
     const p = this.pose;
     const mx = p.headX + 9 + Math.cos(p.snoutAng) * 26;
     const my = p.headY + 3.5 + Math.sin(p.snoutAng) * 26 + 5;

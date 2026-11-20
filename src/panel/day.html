@@ -25,6 +25,20 @@
         <p class="hint" id="tasks-hint"></p>
       </section>
 
+      <section aria-labelledby="habits-h">
+        <h2 id="habits-h">Hábitos</h2>
+        <ul id="habits" class="habits"></ul>
+        <form id="add-habit" class="row" autocomplete="off">
+          <input id="new-habit" class="grow" type="text" maxlength="40" placeholder="Nuevo hábito (ej.: ejercicio, leer)" aria-label="Nuevo hábito" />
+          <button type="submit">Agregar</button>
+        </form>
+      </section>
+
+      <section aria-labelledby="mood-day-h">
+        <h2 id="mood-day-h">¿Cómo estuvo tu día?</h2>
+        <div class="moods" id="moods" role="radiogroup" aria-labelledby="mood-day-h"></div>
+      </section>
+
       <section aria-labelledby="today-h">
         <h2 id="today-h">Hoy</h2>
         <div class="stats" id="stats"></div>

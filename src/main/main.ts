@@ -19,13 +19,14 @@ import {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { PetEvent, PetReport, PetSize } from '../shared/types';
+import type { Ambient, PetEvent, PetReport, PetSize } from '../shared/types';
 import { ActivityTracker } from './activity';
 import { FocusSession } from './focus';
 import { Achievements, type Achievement, type Counter } from './achievements';
 import { MeetingAlerts, currentMeeting, normalizeCalendarUrl, parseCalendar, type Meeting } from './calendar';
 import { DeviceMonitor, type DeviceAlert } from './device';
 import { cleanPaths, moveFiles } from './files';
+import { HabitStore } from './habits';
 import { isFullscreen, watchWindows, type WindowRect } from './fullscreen';
 import { Mood, foodLabel, joyLabel } from './mood';
 import { Pomodoro, POMODORO } from './pomodoro';
@@ -38,7 +39,7 @@ import { isSouthern, outfitFor } from '../shared/season';
 import { TaskNudger, TaskStore } from './tasks';
 import { checkForUpdate } from './updater';
 import { WaterReminder } from './water';
-import { BREAK_CHOICES, COATS, WATER_CHOICES, loadSettings, sanitizeSettings, saveSettings, type Settings } from './settings';
+import { BREAK_CHOICES, COATS, WATER_CHOICES, WATER_GOALS, loadSettings, sanitizeSettings, saveSettings, type Settings } from './settings';
 import { dayKey } from './store';
 
 declare const __PET_BUILD__: number;
@@ -119,8 +120,12 @@ let meetingHeld: string[] = [];
 let wasInMeeting = false;
 let earlyCountedDay = '';
 let shortcutsOk = true;
+let habits: HabitStore;
+let ambientNow: Ambient = 'off';
 
-const SHORTCUTS = { note: 'Control+Alt+N', focus: 'Control+Alt+F', pet: 'Control+Alt+P' } as const;
+const SHORTCUTS = { note: 'Control+Alt+N', focus: 'Control+Alt+F', pet: 'Control+Alt+P', come: 'Control+Alt+V' } as const;
+const AMBIENTS: [Ambient, string][] = [['off', 'Apagado'], ['rain', 'Lluvia'], ['waves', 'Olas'], ['brown', 'Ruido marrón']];
+const MOOD_EMOJI = ['', '😞', '😕', '😐', '🙂', '😄'];
 
 // ------------------------------------------------------------- ventana
 
@@ -474,6 +479,16 @@ function dayView(): unknown {
       : null,
     taskNudges: settings.taskNudges,
     achievements: achievements.list(),
+    waterGoal: settings.waterGoal,
+    moodScore: stats.today(now).moodScore,
+    weekMood: stats.history(now, 7).map((d) => d.stats.moodScore),
+    habits: habits.list.map((h) => ({
+      id: h.id,
+      name: h.name,
+      today: habits.doneOn(h, dayKey(now)),
+      streak: habits.streak(h, now),
+      week: stats.history(now, 7).map((d) => habits.doneOn(h, d.day)),
+    })),
   };
 }
 
@@ -490,7 +505,7 @@ function registerPanelHandlers(): void {
   handle('task:add', ['day'], (text) => {
     if (typeof text !== 'string') return null;
     const task = tasks.add(text, Date.now());
-    if (task) nudger.postpone(Date.now());
+    if (task) nudger.markGreeted(Date.now());
     refreshTray();
     return task;
   });
@@ -509,6 +524,29 @@ function registerPanelHandlers(): void {
     }
     refreshTray();
     return done;
+  });
+  handle('habit:add', ['day'], (name) => (typeof name === 'string' ? habits.add(name, Date.now()) : null));
+  handle('habit:remove', ['day'], (id) => {
+    if (typeof id === 'string') habits.remove(id);
+    return true;
+  });
+  handle('habit:toggle', ['day'], (id) => {
+    if (typeof id !== 'string') return null;
+    const done = habits.toggle(id, Date.now());
+    if (done) {
+      bump('habits');
+      const h = habits.list.find((x) => x.id === id);
+      const streak = h ? habits.streak(h, Date.now()) : 0;
+      send({ type: 'notice', text: streak > 1 ? `¡${h?.name}: ${streak} días seguidos! 🌱` : `¡Bien! ${h?.name} ✔️` });
+    }
+    return done;
+  });
+  handle('mood:set', ['day'], (score) => {
+    if (typeof score !== 'number' || score < 1 || score > 5) return false;
+    stats.setMood(Date.now(), score);
+    stats.save();
+    send({ type: 'notice', text: score >= 4 ? `¡Qué bueno! ${MOOD_EMOJI[score]}` : score === 3 ? 'Gracias por contarme.' : `Mañana será mejor. Aquí estoy ${MOOD_EMOJI[score]}` });
+    return true;
   });
   handle('task:remove', ['day'], (id) => {
     if (typeof id === 'string') tasks.remove(id);
@@ -538,12 +576,14 @@ function registerPanelHandlers(): void {
     coat: settings.coat,
     coats: COATS,
     style: settings.style,
+    waterGoal: settings.waterGoal,
+    waterGoals: WATER_GOALS,
   }));
   handle('settings:set', ['settings'], (patch) => {
     if (typeof patch !== 'object' || patch === null) return false;
     const allowed = [
       'name', 'sound', 'calendarUrl', 'meetingLeadMin', 'dropFolder', 'deviceAlerts', 'taskNudges', 'quietInMeetings',
-      'shortcuts', 'endOfDay', 'endOfDayTime', 'weeklySummary', 'lateNight', 'eyeBreaks', 'weatherCity', 'costumes', 'coat', 'style',
+      'shortcuts', 'endOfDay', 'endOfDayTime', 'weeklySummary', 'lateNight', 'eyeBreaks', 'weatherCity', 'costumes', 'coat', 'style', 'waterGoal',
     ];
     const picked = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     const next = sanitizeSettings({ ...settings, ...picked });
@@ -593,7 +633,7 @@ function registerPanelHandlers(): void {
     if (!note) return false;
     if (note.kind === 'task') {
       if (tasks.add(note.text, Date.now())) {
-        nudger.postpone(Date.now());
+        nudger.markGreeted(Date.now());
         send({ type: 'notice', text: `Anotado en tus tareas: ${note.text}` });
       }
     } else if (reminders.add({ text: note.text, at: note.at })) {
@@ -735,9 +775,22 @@ function onReport(kind: PetReport): void {
       mood.apply('water');
       bump('water');
       const n = stats.today(now).water;
-      send({ type: 'notice', text: `¡Bien! ${n === 1 ? 'Primer vaso' : `Van ${n} vasos`} de hoy 💧` });
+      if (n === settings.waterGoal) {
+        bump('waterGoals');
+        send({ type: 'notice', text: `🎉 ¡Meta de agua cumplida! ${n} vasos hoy.` });
+      } else {
+        const left = settings.waterGoal - n;
+        send({ type: 'notice', text: `¡Bien! ${n === 1 ? 'Primer vaso' : `Van ${n} vasos`} de hoy 💧${left > 0 ? ` (faltan ${left})` : ''}` });
+      }
       break;
     }
+    case 'stretched':
+      stats.add(now, 'stretches');
+      stats.add(now, 'breaks');
+      mood.apply('play');
+      bump('stretches');
+      tracker.snooze(now);
+      break;
   }
   sendMood();
   dayChanged();
@@ -923,6 +976,38 @@ function buildMenu(): Menu {
       ? { label: 'Guardar la pelota', click: () => setBall(false) }
       : { label: 'Jugar a la pelota', enabled: shown, click: () => setBall(true) },
     { label: tasks.pending.length ? `Mi día (${tasks.pending.length} pendientes)…` : 'Mi día…', click: () => openPanel('day') },
+    {
+      label: 'Ven aquí',
+      enabled: shown || userHidden,
+      accelerator: settings.shortcuts && shortcutsOk ? SHORTCUTS.come : undefined,
+      registerAccelerator: false,
+      click: comeHere,
+    },
+    { label: 'Rutina de estiramiento (2 min)', click: startStretch },
+    {
+      label: 'Sonido ambiente',
+      submenu: [
+        ...AMBIENTS.map(([id, label]) => ({
+          label,
+          type: 'radio' as const,
+          checked: settings.ambient === id,
+          click: () => {
+            updateSettings({ ambient: id });
+            syncAmbient();
+          },
+        })),
+        { type: 'separator' as const },
+        {
+          label: 'Solo durante el foco',
+          type: 'checkbox' as const,
+          checked: settings.ambientFocusOnly,
+          click: (item: Electron.MenuItem) => {
+            updateSettings({ ambientFocusOnly: item.checked });
+            syncAmbient();
+          },
+        },
+      ],
+    },
     remindersMenu(),
     {
       label: 'Nota rápida…',
@@ -933,36 +1018,41 @@ function buildMenu(): Menu {
     focusMenu(),
     { type: 'separator' },
     {
-      label: 'Avisarme de descansos',
-      type: 'checkbox',
-      checked: settings.breakReminders,
-      click: (item) => updateSettings({ breakReminders: item.checked }),
-    },
-    {
-      label: 'Avisar cada',
-      enabled: settings.breakReminders,
-      submenu: BREAK_CHOICES.map((m) => ({
-        label: `${m} minutos`,
-        type: 'radio' as const,
-        checked: settings.breakEveryMin === m,
-        click: () => updateSettings({ breakEveryMin: m }),
-      })),
-    },
-    {
-      label: 'Avisarme de tomar agua',
-      type: 'checkbox',
-      checked: settings.waterReminders,
-      click: (item) => updateSettings({ waterReminders: item.checked }),
-    },
-    {
-      label: 'Agua cada',
-      enabled: settings.waterReminders,
-      submenu: WATER_CHOICES.map((m) => ({
-        label: `${m} minutos`,
-        type: 'radio' as const,
-        checked: settings.waterEveryMin === m,
-        click: () => updateSettings({ waterEveryMin: m }),
-      })),
+      label: 'Avisos',
+      submenu: [
+      {
+        label: 'Avisarme de descansos',
+        type: 'checkbox',
+        checked: settings.breakReminders,
+        click: (item) => updateSettings({ breakReminders: item.checked }),
+      },
+      {
+        label: 'Avisar cada',
+        enabled: settings.breakReminders,
+        submenu: BREAK_CHOICES.map((m) => ({
+          label: `${m} minutos`,
+          type: 'radio' as const,
+          checked: settings.breakEveryMin === m,
+          click: () => updateSettings({ breakEveryMin: m }),
+        })),
+      },
+      {
+        label: 'Avisarme de tomar agua',
+        type: 'checkbox',
+        checked: settings.waterReminders,
+        click: (item) => updateSettings({ waterReminders: item.checked }),
+      },
+      {
+        label: 'Agua cada',
+        enabled: settings.waterReminders,
+        submenu: WATER_CHOICES.map((m) => ({
+          label: `${m} minutos`,
+          type: 'radio' as const,
+          checked: settings.waterEveryMin === m,
+          click: () => updateSettings({ waterEveryMin: m }),
+        })),
+      },
+      ],
     },
     {
       label: 'Tamaño',
@@ -1106,6 +1196,7 @@ function tickActivity(): void {
   const tired = eyes.tick({ now, enabled: settings.eyeBreaks && shown, everyMin: 20, away: tracker.isAway, quiet: inMeeting(now) || thirsty });
   if (tired) send({ type: 'eyes' });
 
+  syncAmbient();
   tickDay(now, shown);
 }
 
@@ -1243,7 +1334,8 @@ function tickDaily(now: number, away: boolean, meetingNow: boolean, shown: boole
     if (today.tasksDone) parts.push(`${today.tasksDone} tarea${today.tasksDone === 1 ? '' : 's'} hecha${today.tasksDone === 1 ? '' : 's'}`);
     const pending = tasks.pending;
     const tomorrow = pending.length ? `\nPara mañana: ${pending.slice(0, 3).map((t) => t.text).join(', ')}${pending.length > 3 ? '…' : ''}` : '';
-    notify({ type: 'notice', text: `🏁 Son las ${settings.endOfDayTime}. ¡Hora de cortar!\nHoy: ${parts.join(', ')}.${tomorrow}` });
+    const ask = today.moodScore ? '' : '\n¿Cómo estuvo tu día? Cuéntamelo en Mi día.';
+    notify({ type: 'notice', text: `🏁 Son las ${settings.endOfDayTime}. ¡Hora de cortar!\nHoy: ${parts.join(', ')}.${tomorrow}${ask}` });
   }
 
   if (weekly.tick({ now, h: 16, m: 0, enabled: settings.weeklySummary, ready })) {
@@ -1255,7 +1347,9 @@ function tickDaily(now: number, away: boolean, meetingNow: boolean, shown: boole
     const best = week.reduce((a, x) => (x.stats.activeSec > a.stats.activeSec ? x : a), week[0]);
     const bestName = best ? new Date(`${best.day}T12:00:00`).toLocaleDateString('es', { weekday: 'long' }) : '';
     const bits = [`${hm(sum('activeSec'))} frente al equipo`, `${sum('focusSessions')} focos`, `${sum('water')} vasos de agua`, `${sum('tasksDone')} tareas`];
-    notify({ type: 'notice', text: `📊 Tu semana: ${bits.join(', ')}.${bestName ? `\nTu mejor día fue el ${bestName}.` : ''}\n¡Buen fin de semana!` });
+    const moods = week.map((x) => x.stats.moodScore).filter((m) => m > 0);
+    const avg = moods.length ? MOOD_EMOJI[Math.round(moods.reduce((a, m) => a + m, 0) / moods.length)] : '';
+    notify({ type: 'notice', text: `📊 Tu semana: ${bits.join(', ')}.${bestName ? `\nTu mejor día fue el ${bestName}.` : ''}${avg ? `\nÁnimo de la semana: ${avg}` : ''}\n¡Buen fin de semana!` });
   }
 
   if (lateNight.tick({ now, h: 23, m: 0, enabled: settings.lateNight, ready: ready && today.activeSec >= 10 * 60 })) {
@@ -1291,6 +1385,36 @@ async function fetchForecast(place: Place) {
   return f;
 }
 
+// ------------------------------------------------- llamar, estirar, sonido
+
+/** El perro corre hasta donde está el cursor (si está en otra pantalla, se muda allá). */
+function comeHere(): void {
+  const point = screen.getCursorScreenPoint();
+  const under = screen.getDisplayNearestPoint(point);
+  if (under.id !== currentDisplay().id) moveToDisplay(under);
+  showPet();
+  send({ type: 'come', x: point.x - bounds.x });
+}
+
+function startStretch(): void {
+  showPet();
+  send({ type: 'stretch' });
+}
+
+/** Qué sonido ambiente corresponde ahora (puede ser "solo durante el foco"). */
+function wantedAmbient(): Ambient {
+  if (settings.ambient === 'off' || tracker.isAway) return 'off';
+  if (settings.ambientFocusOnly && !focusing()) return 'off';
+  return settings.ambient;
+}
+
+function syncAmbient(force = false): void {
+  const want = wantedAmbient();
+  if (want === ambientNow && !force) return;
+  ambientNow = want;
+  send({ type: 'ambient', kind: want });
+}
+
 // ---------------------------------------------------------------- atajos
 
 function registerShortcuts(): void {
@@ -1301,6 +1425,7 @@ function registerShortcuts(): void {
     [SHORTCUTS.note, () => openPanel('quick')],
     [SHORTCUTS.focus, toggleFocus],
     [SHORTCUTS.pet, () => (userHidden ? showPet() : hidePet(null))],
+    [SHORTCUTS.come, comeHere],
   ];
   for (const [accel, fn] of actions) {
     try {
@@ -1323,6 +1448,7 @@ function start(): void {
   tasks = new TaskStore(path.join(app.getPath('userData'), 'tasks.json'));
   mood = new Mood(path.join(app.getPath('userData'), 'mood.json'));
   achievements = new Achievements(path.join(app.getPath('userData'), 'achievements.json'));
+  habits = new HabitStore(path.join(app.getPath('userData'), 'habits.json'));
   eyes = new WaterReminder(Date.now(), 20);
   registerPanelHandlers();
 
@@ -1335,6 +1461,7 @@ function start(): void {
     sendSettings();
     sendMood(true);
     if (ballOut) send({ type: 'ball', out: true });
+    syncAmbient(true);
     if (tracker.isAway) send({ type: 'away' });
     if (focus.active) send({ type: 'focus-start', minutes: focus.minutes });
     if (pomodoro.inFocus) send({ type: 'focus-start', minutes: pomodoro.remainingMin(Date.now()) });
@@ -1352,7 +1479,7 @@ function start(): void {
 
   ipcMain.on('pet:report', (event, kind: unknown) => {
     if (!isFromPet(event)) return;
-    if (kind === 'pet' || kind === 'treat' || kind === 'play' || kind === 'drank') onReport(kind);
+    if (kind === 'pet' || kind === 'treat' || kind === 'play' || kind === 'drank' || kind === 'stretched') onReport(kind);
   });
 
   ipcMain.on('pet:battery', (event, level: unknown, charging: unknown) => {
