@@ -14,7 +14,8 @@ export const SHELL_VERSION = 1;
 
 export const RELEASES_URL = 'https://github.com/Dusanap1991/Pet/releases';
 export const FEED_URL = `${RELEASES_URL}/latest/download/latest.json`;
-const MAX_BYTES = 20 * 1024 * 1024;
+// Con los videos del perro el paquete ronda los 10 MB; se deja margen para más clips.
+const MAX_BYTES = 60 * 1024 * 1024;
 
 /** Contenido de latest.json. */
 export interface UpdateInfo {
