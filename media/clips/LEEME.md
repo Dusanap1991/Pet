@@ -30,6 +30,6 @@ Photorealistic video of this exact red smooth-haired dachshund (same dog as the 
 ```
 
 Clips que ya están: quieto, caminar, correr, sentarse (y levantarse, que es el
-mismo al revés), sentado, echado, dormir y olfatear. Los que faltan, en orden de
-utilidad: comer, feliz (cola), ladrar, echarse, bostezar, estirarse, sacudirse,
+mismo al revés), sentado, echado, dormir, olfatear, comer, feliz y ladrar. Los
+que faltan, en orden de utilidad: echarse, bostezar, estirarse, sacudirse,
 colgando del pellejo y sentado de frente.

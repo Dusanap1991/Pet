@@ -76,6 +76,28 @@
       "stabilize": true,
       "minLen": 2,
       "maxLen": 8
+    },
+    "comer": {
+      "src": "media/clips/10-comer.mp4",
+      "start": 0.9,
+      "end": 6.5,
+      "kind": "once"
+    },
+    "feliz": {
+      "src": "media/clips/11-feliz.mp4",
+      "start": 11,
+      "end": 20,
+      "kind": "loop",
+      "minLen": 3,
+      "maxLen": 8.5
+    },
+    "ladrar": {
+      "src": "media/clips/12-ladrar.mp4",
+      "start": 23,
+      "end": 30,
+      "kind": "loop",
+      "minLen": 2.5,
+      "maxLen": 6.5
     }
   }
 }

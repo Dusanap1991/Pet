@@ -98,6 +98,39 @@
       "loop": true,
       "anchorX": 296.31532728762335,
       "anchorY": 211.0
+    },
+    "comer": {
+      "file": "comer.webm",
+      "poster": "comer.png",
+      "width": 508,
+      "height": 272,
+      "frames": 135,
+      "fps": 24,
+      "loop": false,
+      "anchorX": 279.24393381213764,
+      "anchorY": 252.0
+    },
+    "feliz": {
+      "file": "feliz.webm",
+      "poster": "feliz.png",
+      "width": 492,
+      "height": 274,
+      "frames": 80,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 282.3751705698661,
+      "anchorY": 260.0
+    },
+    "ladrar": {
+      "file": "ladrar.webm",
+      "poster": "ladrar.png",
+      "width": 510,
+      "height": 262,
+      "frames": 67,
+      "fps": 24,
+      "loop": true,
+      "anchorX": 279.49433508106796,
+      "anchorY": 250.0
     }
   },
   "dogLengthPx": 470,

@@ -16,6 +16,9 @@ import m_levantarse from '../../assets/dog/levantarse.mask.json';
 import m_echado from '../../assets/dog/echado.mask.json';
 import m_dormir from '../../assets/dog/dormir.mask.json';
 import m_olfatear from '../../assets/dog/olfatear.mask.json';
+import m_comer from '../../assets/dog/comer.mask.json';
+import m_feliz from '../../assets/dog/feliz.mask.json';
+import m_ladrar from '../../assets/dog/ladrar.mask.json';
 import type { DogState } from './dog/dog';
 
 type ClipName = keyof typeof manifest.clips;
@@ -41,6 +44,9 @@ const MASKS: Record<ClipName, Mask> = {
   echado: m_echado,
   dormir: m_dormir,
   olfatear: m_olfatear,
+  comer: m_comer,
+  feliz: m_feliz,
+  ladrar: m_ladrar,
 };
 const decoded = new Map<string, Uint8Array>();
 function bits(name: ClipName, frame: number): Uint8Array {
@@ -75,7 +81,9 @@ export interface VideoView {
 
 const WALK: DogState[] = ['walk', 'carry'];
 /** Con la nariz en el suelo: olfatear, comer, recoger la pelota. */
-const NOSE_DOWN: DogState[] = ['sniff', 'eat', 'pickup'];
+const NOSE_DOWN: DogState[] = ['sniff', 'pickup'];
+/** Velocidad de algunos videos que se ven una vez (comer dura más que la animación del perro). */
+const RATE: Partial<Record<ClipName, number>> = { comer: 1.3 };
 /** Fundido cuando se pasa de un video a otro sin transición filmada. */
 const FADE_MS = 160;
 
@@ -172,12 +180,15 @@ export class DogVideo {
   }
 
   private target(view: VideoView): ClipName {
+    if (view.state === 'eat') return 'comer';
     if (NOSE_DOWN.includes(view.state)) return 'olfatear';
     if (WALK.includes(view.state)) return 'caminar';
     if (RUN.includes(view.state)) return 'correr';
     if (view.posture === 'sleep') return 'dormir';
     if (view.posture === 'lie') return 'echado';
     if (view.posture === 'sit') return 'sentado';
+    if (view.state === 'happy' || view.state === 'land') return 'feliz';
+    if (view.state === 'bark') return 'ladrar';
     return 'quieto';
   }
 
@@ -242,7 +253,7 @@ export class DogVideo {
         this.play(clip, TRANSITION_RATE);
       } else {
         this.shownPose = wantPose;
-        this.play(want);
+        this.play(want, RATE[want] ?? 1);
       }
     }
 

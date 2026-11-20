@@ -63,7 +63,7 @@ Para Windows y macOS.
   De noche está más dormilón.
 - **Perro realista**: el estilo por defecto usa videos de un perro salchicha de
   verdad, recortados del fondo verde (quieto, caminando, trotando, olfateando,
-  sentándose, sentado, levantándose, echado y durmiendo). Los videos originales y cómo agregar más están en
+  sentándose, sentado, levantándose, echado, durmiendo, comiendo, feliz y ladrando). Los videos originales y cómo agregar más están en
   [media/clips/LEEME.md](media/clips/LEEME.md).
 - **Estilo 3D**: en Ajustes → Estilo puedes cambiar el dibujo por un
   perro en 3D, con volumen, luz, sombra y giros reales (se pone de tres cuartos
