@@ -18,6 +18,8 @@ body {
 #dog,
 #dog3d,
 .timer-pill,
+.prop-shadow,
+.laser,
 .treat,
 .ball,
 .bubble {
@@ -168,5 +170,58 @@ body.demo.dark {
 }
 
 .timer-pill.show {
+  opacity: 1;
+}
+
+.prop-shadow {
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(30, 22, 16, 0.55), rgba(30, 22, 16, 0.2) 60%, rgba(30, 22, 16, 0));
+}
+
+.treat.bowl.appear {
+  animation: bowl-in 0.45s ease-out;
+}
+
+.treat.bowl.leave {
+  transition: opacity 0.6s ease;
+  opacity: 0;
+}
+
+.treat.found svg {
+  animation: found 0.5s ease-out;
+}
+
+@keyframes bowl-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes found {
+  0% {
+    transform: translateY(0) scale(0.6);
+  }
+  45% {
+    transform: translateY(-14px) scale(1.1);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.laser {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, #fff 0 18%, #ff2a2a 35%, rgba(255, 30, 30, 0.35) 62%, rgba(255, 30, 30, 0) 72%);
+  box-shadow: 0 0 10px 3px rgba(255, 40, 40, 0.55);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.laser.on {
   opacity: 1;
 }

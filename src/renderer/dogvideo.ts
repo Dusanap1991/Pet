@@ -81,15 +81,17 @@ export interface VideoView {
   /** Punto agarrado, en píxeles relativos al punto de apoyo. */
   pivotX: number;
   pivotY: number;
+  /** Cuánto dura el estado actual (el plato de comida dura más que un premio). */
+  stateDur: number;
 }
 
 const WALK: DogState[] = ['walk', 'carry'];
 /** Con la nariz en el suelo: olfatear, comer, recoger la pelota. */
-const NOSE_DOWN: DogState[] = ['sniff', 'pickup'];
+const NOSE_DOWN: DogState[] = ['sniff', 'pickup', 'search'];
 /** Velocidad de algunos videos que se ven una vez (comer dura más que la animación del perro). */
 const RATE: Partial<Record<ClipName, number>> = { comer: 1.3 };
 /** Fundido cuando se pasa de un video a otro sin transición filmada. */
-const FADE_MS = 160;
+const FADE_MS = 110;
 
 type Pose = 'stand' | 'sit' | 'lie';
 const RUN: DogState[] = ['run', 'fetch', 'chase'];
@@ -239,7 +241,8 @@ export class DogVideo {
       void next.offsetWidth;
       next.style.transition = `opacity ${FADE_MS}ms ease`;
       next.style.opacity = '1';
-      prev.style.transition = `opacity ${FADE_MS}ms ease`;
+      // El anterior se va más rápido que lo que tarda en aparecer el nuevo: casi no se ve doble.
+      prev.style.transition = `opacity ${Math.round(FADE_MS * 0.6)}ms ease-in`;
       prev.style.opacity = '0';
       setTimeout(() => {
         if (this.current !== name) return;
@@ -280,7 +283,9 @@ export class DogVideo {
         this.play(clip, TRANSITION_RATE);
       } else {
         this.shownPose = wantPose;
-        this.play(want, RATE[want] ?? 1);
+        // Comer del plato dura más: el video va a velocidad normal para que alcance.
+        const rate = want === 'comer' && view.stateDur > 3 ? 1 : RATE[want] ?? 1;
+        this.play(want, rate);
       }
     }
 

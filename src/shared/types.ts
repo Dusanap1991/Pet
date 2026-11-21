@@ -14,7 +14,10 @@ export type PetEvent =
   | { type: 'break-due'; minutes: number }
   | { type: 'focus-start'; minutes: number }
   | { type: 'focus-end'; completed: boolean; minutes: number }
-  | { type: 'treat' }
+  | { type: 'treat'; kind?: 'cookie' | 'bone' | 'sausage'; x?: number }
+  | { type: 'meal' }
+  | { type: 'hide' }
+  | { type: 'laser'; seconds: number }
   | { type: 'water' }
   | { type: 'reminder'; text: string }
   | { type: 'notice'; text: string }
@@ -30,7 +33,7 @@ export type PetEvent =
   | { type: 'ball'; out: boolean };
 
 /** Lo que el perro le cuenta al proceso principal (para el resumen del día y el ánimo). */
-export type PetReport = 'pet' | 'treat' | 'play' | 'drank' | 'stretched';
+export type PetReport = 'pet' | 'treat' | 'play' | 'drank' | 'stretched' | 'treat-cookie' | 'treat-bone' | 'treat-sausage' | 'meal' | 'tired';
 
 /** API que el preload expone en `window.pet`. */
 export interface PetBridge {

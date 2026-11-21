@@ -28,7 +28,11 @@ export function setupDemo(emit: (e: PetEvent) => void): void {
     panel.appendChild(b);
   };
 
-  add('Dar un premio', () => emit({ type: 'treat' }));
+  add('Premio', () => emit({ type: 'treat' }));
+  add('Salchicha', () => emit({ type: 'treat', kind: 'sausage' }));
+  add('Comida', () => emit({ type: 'meal' }));
+  add('Esconder', () => emit({ type: 'hide' }));
+  add('Láser', () => emit({ type: 'laser', seconds: 30 }));
   add('Me fui (duerme)', () => emit({ type: 'away' }));
   add('Volví', () => emit({ type: 'back', awaySec: 600 }));
   add('Aviso de descanso', () => emit({ type: 'break-due', minutes: 50 }));

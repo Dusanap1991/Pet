@@ -8,7 +8,7 @@ export interface MoodState {
   food: number;
 }
 
-export type MoodAction = 'pet' | 'treat' | 'play' | 'water' | 'task' | 'drop';
+export type MoodAction = 'pet' | 'treat' | 'play' | 'water' | 'task' | 'drop' | 'cookie' | 'bone' | 'sausage' | 'meal';
 
 const GAIN: Record<MoodAction, Partial<MoodState>> = {
   pet: { joy: 6 },
@@ -17,6 +17,10 @@ const GAIN: Record<MoodAction, Partial<MoodState>> = {
   water: { joy: 3 },
   task: { joy: 4 },
   drop: { joy: -2 },
+  cookie: { food: 15, joy: 3 },
+  bone: { food: 25, joy: 5 },
+  sausage: { food: 35, joy: 10 },
+  meal: { food: 100, joy: 6 },
 };
 
 /** Puntos que pierde por minuto (despierto / mientras no estás y duerme). */

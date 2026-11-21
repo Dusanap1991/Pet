@@ -780,7 +780,8 @@ function onDrop(raw: unknown): void {
 
 // ---------------------------------------------------------- lo que cuenta el perro
 
-function onReport(kind: PetReport): void {
+function onReport(kind_: PetReport): void {
+  const kind = kind_;
   const now = Date.now();
   switch (kind) {
     case 'pet':
@@ -789,9 +790,22 @@ function onReport(kind: PetReport): void {
       bump('pets');
       break;
     case 'treat':
+    case 'treat-cookie':
+    case 'treat-bone':
+    case 'treat-sausage': {
       stats.add(now, 'treats');
-      mood.apply('treat');
+      const kind = kind_ === 'treat' ? 'bone' : (kind_.slice(6) as 'cookie' | 'bone' | 'sausage');
+      mood.apply(kind);
       bump('treats');
+      break;
+    }
+    case 'meal':
+      stats.add(now, 'treats');
+      mood.apply('meal');
+      bump('meals');
+      break;
+    case 'tired':
+      mood.apply('play');
       break;
     case 'play':
       if (now - lastPlayReport < 15_000) return;
@@ -839,6 +853,13 @@ function deviceText(a: DeviceAlert): string {
     case 'restart':
       return `El equipo lleva ${a.days} días sin reiniciarse. Cuando puedas, reinícialo: anda más rápido.`;
   }
+}
+
+/** Deja caer un premio donde está el cursor (si está en la pantalla del perro). */
+function dropAtCursor(kind?: 'cookie' | 'bone' | 'sausage'): void {
+  const p = screen.getCursorScreenPoint();
+  const inside = p.x >= bounds.x && p.x < bounds.x + bounds.width && p.y >= bounds.y && p.y < bounds.y + bounds.height;
+  send({ type: 'treat', kind, x: inside ? p.x - bounds.x : undefined });
 }
 
 function setBall(out: boolean): void {
@@ -1082,10 +1103,30 @@ function buildMenu(): Menu {
     ...(inDnd(Date.now()) ? [{ label: `🤫 No molestar hasta ${clock(dndUntil!)}`, enabled: false }] : []),
     ...visibilityMenu(),
     { type: 'separator' },
-    { label: 'Dar un premio', enabled: shown, click: () => send({ type: 'treat' }) },
-    ballOut
-      ? { label: 'Guardar la pelota', click: () => setBall(false) }
-      : { label: 'Jugar a la pelota', enabled: shown, click: () => setBall(true) },
+    {
+      label: 'Comida',
+      enabled: shown,
+      submenu: [
+        { label: '🍽️ Servir comida', click: () => send({ type: 'meal' }) },
+        { type: 'separator' },
+        { label: 'Premio sorpresa', click: () => dropAtCursor() },
+        { label: '🍪 Galleta', click: () => dropAtCursor('cookie') },
+        { label: '🦴 Hueso', click: () => dropAtCursor('bone') },
+        { label: '🌭 Salchicha (su favorita)', click: () => dropAtCursor('sausage') },
+        { type: 'separator' },
+        { label: '👃 Esconder un premio', click: () => send({ type: 'hide' }) },
+      ],
+    },
+    {
+      label: 'Jugar',
+      enabled: shown,
+      submenu: [
+        ballOut
+          ? { label: 'Guardar la pelota', click: () => setBall(false) }
+          : { label: '🎾 Pelota', click: () => setBall(true) },
+        { label: '🔴 Puntero láser (30 s)', click: () => send({ type: 'laser', seconds: 30 }) },
+      ],
+    },
     { label: tasks.pending.length ? `Mi día (${tasks.pending.length} pendientes)…` : 'Mi día…', click: () => openPanel('day') },
     {
       label: 'Ven aquí',
@@ -1421,7 +1462,7 @@ function tickDay(now: number, shown: boolean): void {
   sendMood();
   if (mood.hungry && !away && !quiet && now - lastHungerNudge > HUNGER_NUDGE_MS) {
     lastHungerNudge = now;
-    queueNotice('Tengo hambre… ¿me das un premio? 🦴');
+    queueNotice('Tengo hambre… ¿me sirves comida? 🍽️ (menú → Comida)');
   }
 
   tickDaily(now, away, meetingNow, shown);
@@ -1610,7 +1651,8 @@ function start(): void {
 
   ipcMain.on('pet:report', (event, kind: unknown) => {
     if (!isFromPet(event)) return;
-    if (kind === 'pet' || kind === 'treat' || kind === 'play' || kind === 'drank' || kind === 'stretched') onReport(kind);
+    const ok: PetReport[] = ['pet', 'treat', 'play', 'drank', 'stretched', 'treat-cookie', 'treat-bone', 'treat-sausage', 'meal', 'tired'];
+    if (ok.includes(kind as PetReport)) onReport(kind as PetReport);
   });
 
   ipcMain.on('pet:battery', (event, level: unknown, charging: unknown) => {

@@ -9,7 +9,7 @@ export type DogState =
   | 'idle' | 'walk' | 'sniff' | 'run' | 'sit' | 'lie' | 'sleep'
   | 'alert' | 'eat' | 'happy' | 'bark' | 'drag' | 'fall' | 'land'
   | 'fetch' | 'pickup' | 'carry'
-  | 'bow' | 'chase' | 'yawn' | 'stretch' | 'shake' | 'spin';
+  | 'bow' | 'chase' | 'yawn' | 'stretch' | 'shake' | 'spin' | 'search';
 
 type Posture = 'stand' | 'sit' | 'lie' | 'sleep';
 
@@ -25,6 +25,10 @@ export interface World {
 export interface TreatTarget {
   x: number;
   landed: boolean;
+  /** Cuánto demora en comérselo (el plato de comida dura más que un premio). */
+  eatTime?: number;
+  /** Avance mientras come (0 a 1): el plato se va vaciando. */
+  progress?(p: number): void;
 }
 
 export interface DogHooks {
@@ -39,6 +43,12 @@ export interface DogHooks {
   dropBall(vx: number): void;
   /** Trajo la pelota de vuelta. */
   played(): void;
+  /** Premio escondido que hay que buscar olfateando (o null). */
+  hiddenTreat(): TreatTarget | null;
+  /** Lo encontró: el premio aparece. */
+  revealTreat(t: TreatTarget): void;
+  /** Dónde está el punto del puntero láser (o null si está apagado). */
+  laser(): { x: number } | null;
 }
 
 const TAU = Math.PI * 2;
@@ -65,7 +75,7 @@ const WAG: Record<DogState, [number, number]> = {
   lie: [0.06, 3], sleep: [0, 2], alert: [0.04, 4], eat: [0.45, 13], happy: [0.6, 17],
   bark: [0.3, 12], drag: [0, 4], fall: [0, 4], land: [0.12, 6],
   fetch: [0.3, 11], pickup: [0.4, 12], carry: [0.5, 13],
-  bow: [0.6, 16], chase: [0.45, 14], yawn: [0.05, 3], stretch: [0.35, 9], shake: [0.2, 8], spin: [0.5, 15],
+  bow: [0.6, 16], chase: [0.45, 14], search: [0.35, 10], yawn: [0.05, 3], stretch: [0.35, 9], shake: [0.2, 8], spin: [0.5, 15],
 };
 
 function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
@@ -167,6 +177,12 @@ export class Dog {
   private playT = 0;
   private slowT = 0;
   private chaseCooldown = 0;
+  /** Cansado de jugar: ignora la pelota y el láser hasta que pase este tiempo (s). */
+  private tiredT = 0;
+  /** Búsqueda del premio escondido: cuánto se pasa de largo en cada vuelta. */
+  private searchSpan = 0;
+  private searchDir: 1 | -1 = 1;
+  private laserWas = false;
   private world: World = { width: 800, floorY: 600, cursorX: 0, cursorY: 0, cursorKnown: false };
 
   constructor(scale: number, private fx: Fx, private hooks: DogHooks) {
@@ -198,6 +214,7 @@ export class Dog {
       tilt: this.rot - this.facing * this.hang * this.hangMax(),
       pivotX: this.grabDX,
       pivotY: this.grabDY,
+      stateDur: this.stateDur,
     };
   }
 
@@ -288,6 +305,7 @@ export class Dog {
     if (state === 'run' || state === 'fetch') { this.stride = 21; this.lift = 8; }
     if (state === 'carry') { this.stride = 15; this.lift = 6; }
     if (state === 'eat') this.ate = false;
+    if (state === 'search') { this.stride = 9; this.lift = 3; }
   }
 
   /** Vuelve a la rutina después de una interrupción (caricia, ladrido). */
@@ -535,23 +553,23 @@ export class Dog {
   private think(dt: number): void {
     switch (this.state) {
       case 'idle':
-        if (this.noticeTreat() || this.noticeBall() || this.noticeCursor()) return;
+        if (this.noticeTreat() || this.noticeHidden() || this.noticeLaser() || this.noticeBall() || this.noticeCursor()) return;
         this.turnTowardCursor(dt);
         if (this.stateT >= this.stateDur) this.chooseFromIdle();
         break;
 
       case 'walk':
-        if (this.noticeTreat() || this.noticeBall() || this.noticeCursor()) return;
+        if (this.noticeTreat() || this.noticeHidden() || this.noticeLaser() || this.noticeBall() || this.noticeCursor()) return;
         if (this.moveToward(dt, 42)) this.enter('idle', rand(1.5, 5));
         break;
 
       case 'sniff':
-        if (this.noticeTreat() || this.noticeBall() || this.noticeCursor()) return;
+        if (this.noticeTreat() || this.noticeHidden() || this.noticeLaser() || this.noticeBall() || this.noticeCursor()) return;
         if (this.moveToward(dt, 20)) this.enter('idle', rand(1.5, 4));
         break;
 
       case 'sit':
-        if (this.noticeTreat() || this.noticeBall() || this.noticeCursor()) return;
+        if (this.noticeTreat() || this.noticeHidden() || this.noticeLaser() || this.noticeBall() || this.noticeCursor()) return;
         if (this.stateT >= this.stateDur) {
           const r = Math.random();
           if (this.awayMode || this.focusMode || r < 0.3) this.enter('lie', rand(8, 18));
@@ -561,7 +579,7 @@ export class Dog {
         break;
 
       case 'lie':
-        if (this.noticeTreat() || this.noticeBall()) return;
+        if (this.noticeTreat() || this.noticeHidden() || this.noticeLaser() || this.noticeBall()) return;
         if (this.stateT >= this.stateDur) {
           const r = Math.random();
           if (this.awayMode) this.enter('sleep');
@@ -613,20 +631,21 @@ export class Dog {
         if (this.targetX < lo || this.targetX > hi) this.targetX = treat.x + side * reach;
         if (this.moveToward(dt, 175)) {
           this.facing = treat.x >= this.x ? 1 : -1;
-          this.enter('eat', 1.9);
+          this.enter('eat', treat.eatTime ?? 1.9);
         }
         break;
       }
 
       case 'eat': {
         const treat = this.goalTreat;
+        if (treat?.progress && !this.ate) treat.progress(Math.min(1, this.stateT / this.stateDur));
         this.fxTimer -= dt;
         if (!this.ate && this.fxTimer <= 0 && this.stateT > 0.25) {
           const m = this.mouthOffset();
           this.fx.crumb(m.x, m.y, this.scale);
           this.fxTimer = 0.09;
         }
-        if (!this.ate && this.stateT >= this.stateDur * 0.6) {
+        if (!this.ate && this.stateT >= this.stateDur * (treat?.eatTime ? 0.97 : 0.6)) {
           this.ate = true;
           if (treat) this.hooks.eatTreat(treat);
           this.goalTreat = null;
@@ -707,6 +726,25 @@ export class Dog {
       case 'chase': {
         const w = this.world;
         this.playT += dt;
+        const laser = this.hooks.laser();
+        if (laser) {
+          // Persigue el punto del láser mientras esté encendido.
+          // Llega con la nariz sobre el punto (el perro del video tiene la cabeza más adelante que el dibujo).
+          const reach = (this.photo ? MOUTH_REACH * 1.12 : MOUTH_REACH - 20) * this.scale;
+          const side = laser.x >= this.x ? 1 : -1;
+          const [lo, hi] = this.bounds();
+          this.targetX = clamp(laser.x - side * reach, lo, hi);
+          this.moveToward(dt, 230);
+          if (Math.abs(this.targetX - this.x) < 4 * this.scale) this.facing = side;
+          break;
+        }
+        if (this.laserWas) {
+          this.laserWas = false;
+          this.hooks.played();
+          this.enter('happy', 1.4);
+          this.spawnHeart();
+          break;
+        }
         // Se aburre si dejas el mouse quieto, si lo subes lejos del suelo o tras un rato.
         this.slowT = this.cursorSpeed < 160 || !this.cursorLow() ? this.slowT + dt : 0;
         if (this.slowT > 1.3 || this.playT > 12) {
@@ -743,6 +781,33 @@ export class Dog {
           else this.enter('idle', rand(1, 3));
         }
         break;
+
+      case 'search': {
+        // Busca olfateando: va y viene pasándose de largo cada vez menos, hasta dar con el premio.
+        const hidden = this.hooks.hiddenTreat();
+        if (!hidden) {
+          this.enter('idle', 1);
+          break;
+        }
+        const reach = MOUTH_REACH * this.scale;
+        const [lo, hi] = this.bounds();
+        if (this.moveToward(dt, 24)) {
+          const near = Math.abs(hidden.x - this.x) < reach * 1.25 && this.searchSpan < reach * 0.9;
+          if (near) {
+            this.hooks.revealTreat(hidden);
+            const h = this.headOffset();
+            this.fx.bang(h.x, h.y - 34 * this.scale, this.scale);
+            this.hooks.say('¡Lo encontré! 🐾', 2500);
+            this.goalTreat = hidden;
+            this.enter('run');
+            break;
+          }
+          this.searchDir = this.searchDir === 1 ? -1 : 1;
+          this.searchSpan *= 0.55;
+          this.targetX = clamp(hidden.x + this.searchDir * this.searchSpan, lo, hi);
+        }
+        break;
+      }
 
       case 'happy':
         this.fxTimer += dt;
@@ -852,6 +917,7 @@ export class Dog {
     this.lastCX = w.cursorX;
     this.lastCY = w.cursorY;
     this.chaseCooldown = Math.max(0, this.chaseCooldown - dt);
+    this.tiredT = Math.max(0, this.tiredT - dt);
   }
 
   /** El cursor anda cerca del suelo, a su alcance. */
@@ -869,10 +935,40 @@ export class Dog {
     return true;
   }
 
+  /** Hay un premio escondido: sale a buscarlo con la nariz en el suelo. */
+  private noticeHidden(): boolean {
+    const hidden = this.hooks.hiddenTreat();
+    if (!hidden || this.awayMode) return false;
+    const [lo, hi] = this.bounds();
+    this.searchSpan = Math.max(Math.abs(hidden.x - this.x) * 0.6, 120 * this.scale);
+    this.searchDir = hidden.x >= this.x ? 1 : -1;
+    // Primera pasada: se pasa de largo del lugar.
+    this.targetX = clamp(hidden.x + this.searchDir * this.searchSpan, lo, hi);
+    this.enter('search');
+    this.hooks.say('Mmm… huele a premio 👃', 2500);
+    return true;
+  }
+
+  /** El puntero láser encendido: lo persigue. */
+  private noticeLaser(): boolean {
+    if (!this.hooks.laser() || this.tiredT > 0 || this.awayMode) return false;
+    this.laserWas = true;
+    this.playT = 0;
+    this.enter('bow', 0.5);
+    return true;
+  }
+
+  /** Cansado después de jugar mucho: se echa y no juega por un rato. */
+  tire(seconds: number): void {
+    this.tiredT = seconds;
+    if (this.state === 'drag' || this.state === 'fall') return;
+    this.enter('lie', seconds);
+  }
+
   /** Si lanzaste la pelota, va a buscarla. */
   private noticeBall(): boolean {
     const ball = this.hooks.ball();
-    if (!ball || ball.holder !== 'none' || ball.throwId === this.fetchedThrow || this.awayMode || this.focusMode) return false;
+    if (!ball || ball.holder !== 'none' || ball.throwId === this.fetchedThrow || this.awayMode || this.focusMode || this.tiredT > 0) return false;
     this.fetchedThrow = ball.throwId;
     this.enter('fetch');
     const h = this.headOffset();
@@ -944,6 +1040,7 @@ export class Dog {
     const st = this.stateT;
 
     switch (this.state) {
+      case 'search':
       case 'sniff':
         tp.headX = 59;
         tp.headY = -27;

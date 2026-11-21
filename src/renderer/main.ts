@@ -9,7 +9,7 @@ import { Dog, type World } from './dog/dog';
 import { Fx } from './fx';
 import { bark, setAmbient } from './sound';
 import { STR } from './strings';
-import { Treats } from './treats';
+import { FOOD_NAME, Treats, type TreatKind } from './treats';
 
 declare global {
   interface Window {
@@ -230,13 +230,17 @@ const dog = new Dog(scale, fx, {
   say: (text, ms) => bubble.say(text, ms),
   nearestTreat: (x) => treats.nearest(x),
   eatTreat: (t) => {
+    const kind = treats.kindOf(t);
     treats.remove(t);
-    report('treat');
+    onAte(kind);
   },
+  hiddenTreat: () => treats.hiddenOne(),
+  revealTreat: (t) => treats.reveal(t),
+  laser: () => (laserUntil > performance.now() && world.cursorKnown ? { x: laserX } : null),
   ball: () => ball,
   carryBall: (x, y) => ball?.carry(x, y),
   dropBall: (vx) => ball?.drop(vx),
-  played: () => report('play'),
+  played: () => onFetched(),
 });
 
 /** Ladra (si el sonido está activado) y muestra el mensaje. */
@@ -294,8 +298,26 @@ function handle(e: PetEvent): void {
     case 'focus-end':
       dog.focusEnd(e.completed ? STR.focusEnd(e.minutes) : null);
       break;
-    case 'treat':
-      dropTreat();
+    case 'treat': {
+      const kind = e.kind ?? TREAT_KINDS[Math.floor(Math.random() * TREAT_KINDS.length)];
+      dropTreat(kind, e.x);
+      if (!e.kind) dog.remind(`Sorpresa: ¡${FOOD_NAME[kind]}!`, 2200);
+      break;
+    }
+    case 'meal':
+      treats.serve(farSpot(), scale);
+      dog.remind('¡Comida! 🍽️', 2000);
+      break;
+    case 'hide': {
+      const kind = TREAT_KINDS[Math.floor(Math.random() * TREAT_KINDS.length)];
+      const margin = 90 * scale;
+      let x = margin + Math.random() * (world.width - 2 * margin);
+      if (Math.abs(x - dog.x) < 250 * scale) x = farSpot();
+      treats.hide(x, scale, kind);
+      break;
+    }
+    case 'laser':
+      laserUntil = performance.now() + e.seconds * 1000;
       break;
     case 'water': {
       remind(STR.water[Math.floor(Math.random() * STR.water.length)], 8000);
@@ -360,8 +382,69 @@ function handle(e: PetEvent): void {
   }
 }
 
+/** Se comió algo: cada cosa llena distinto; la salchicha es su favorita. */
+function onAte(kind: TreatKind | 'meal'): void {
+  if (kind === 'meal') {
+    report('meal');
+    dog.remind('¡Qué rico! Quedé lleno 😋', 4000);
+    return;
+  }
+  report(`treat-${kind}` as PetReport);
+  if (kind === 'sausage') {
+    dog.remind('¡Salchicha! ¡Mi favorita! 🌭', 3500);
+    const h = dog.headOffset();
+    for (let i = 0; i < 3; i++) fx.heart(h.x, h.y - 22 * scale, scale);
+  }
+}
+
+/** Premios al azar para "sorpresa". */
+const TREAT_KINDS: TreatKind[] = ['cookie', 'bone', 'sausage'];
+
+/** Juego de la pelota: cuenta las atrapadas seguidas, se cansa si son muchas y te pide otra. */
+let fetches: number[] = [];
+let inviteTimer: number | undefined;
+function onFetched(): void {
+  report('play');
+  const now = performance.now();
+  fetches = fetches.filter((t) => now - t < 4 * 60_000);
+  fetches.push(now);
+  const n = fetches.length;
+  clearTimeout(inviteTimer);
+  if (n >= 8) {
+    fetches = [];
+    dog.tire(45);
+    remind('¡Uf, estoy agotado! Descansemos un ratito 😮‍💨', 5000);
+    report('tired');
+    return;
+  }
+  if (n === 3 || n === 5) dog.remind(`¡${n} seguidas! 🎾`, 2500);
+  // Si no se la vuelves a tirar, te la pide.
+  const id = ball?.throwId;
+  inviteTimer = window.setTimeout(() => {
+    if (ball && ball.throwId === id && ball.holder === 'none') remind('¡Otra vez! ¡Tírala! 🎾', 3000);
+  }, 7000);
+}
+
+/** Puntero láser: un punto rojo en el suelo que sigue al cursor por unos segundos. */
+let laserUntil = 0;
+let laserX = 0;
+const laserEl = document.createElement('div');
+laserEl.className = 'laser';
+stage.appendChild(laserEl);
+function updateLaser(): void {
+  const on = laserUntil > performance.now() && world.cursorKnown;
+  laserEl.classList.toggle('on', on);
+  if (!on) return;
+  laserX = Math.max(20, Math.min(world.width - 20, world.cursorX));
+  laserEl.style.transform = `translate(${Math.round(laserX)}px, ${Math.round(world.floorY - 5)}px)`;
+}
+
 /** El premio cae lejos del perro para que tenga que correr a buscarlo. */
-function dropTreat(): void {
+function dropTreat(kind: TreatKind = 'bone', at?: number): void {
+  if (at !== undefined && at > 20 && at < world.width - 20) {
+    treats.spawn(at, scale, kind);
+    return;
+  }
   const margin = 60 * scale;
   const lo = margin;
   const hi = Math.max(lo, world.width - margin);
@@ -370,7 +453,13 @@ function dropTreat(): void {
   if (Math.abs(x - dog.x) < minDist) {
     x = dog.x - lo > hi - dog.x ? dog.x - minDist : dog.x + minDist;
   }
-  treats.spawn(Math.max(lo, Math.min(hi, x)), scale);
+  treats.spawn(Math.max(lo, Math.min(hi, x)), scale, kind);
+}
+
+/** Lejos del perro, del lado con más espacio. */
+function farSpot(): number {
+  const margin = 110 * scale;
+  return dog.x < world.width / 2 ? world.width - margin : margin;
 }
 
 // ------------------------------------------------------------ puntero
@@ -506,7 +595,7 @@ function frame(now: number): void {
   const elapsed = (now - last) / 1000;
   // Con el perro quieto no hace falta dibujar a 60 cuadros por segundo.
   // (Las "z" del sueño flotan despacio: no justifican subir el ritmo.)
-  const busy = treats.active || pressing || holdingBall || (ball?.moving ?? false) || (fx.active && !dog.sleeping);
+  const busy = treats.active || laserUntil > now || pressing || holdingBall || (ball?.moving ?? false) || (fx.active && !dog.sleeping);
   const minStep = busy ? 0 : dog.sleeping ? 1 / 15 : dog.calm ? 1 / 30 : 0;
   if (elapsed < minStep - 0.004) return;
   last = now;
@@ -514,6 +603,7 @@ function frame(now: number): void {
 
   if (dragging) dog.dragTo(world.cursorX, world.cursorY, dt);
   treats.update(dt, world.floorY);
+  updateLaser();
   dog.update(dt, world);
   ball?.update(dt, world.floorY, world.width);
   fx.update(dt);

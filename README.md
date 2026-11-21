@@ -12,8 +12,12 @@ Para Windows y macOS.
 - **Se deja levantar**: arrástralo hacia arriba y queda colgando del pellejo, de frente; suéltalo y cae sentado, se sacude el susto y sale caminando.
 - **Varias pantallas**: llévalo arrastrando de una pantalla a otra, o elige la
   pantalla desde el menú de la bandeja.
-- **Come premios**: desde el ícono de la bandeja, "Dar un premio" deja caer un
-  hueso y el perro corre a buscarlo.
+- **Comida**: en el menú "Comida" le sirves su plato (come de verdad y queda lleno),
+  le das una galleta, un hueso o una salchicha (su favorita), que caen donde está el
+  cursor, o le escondes un premio para que lo busque olfateando.
+- **Juegos**: la pelota de tenis (lánzala con el mouse; cuenta las atrapadas
+  seguidas, te la pide si no se la tiras y se cansa si juegan mucho) y el puntero
+  láser, que persigue por todo el borde de la pantalla.
 - **Te acompaña**: si dejas de usar el equipo un par de minutos se echa a dormir,
   y te recibe cuando vuelves.
 - **Te cuida**: avisa cuando llevas mucho rato sin parar (50 minutos por defecto).

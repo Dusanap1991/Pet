@@ -14,11 +14,17 @@ export interface BallTarget {
 }
 
 const GRAVITY = 2300;
+// Pelota de tenis: fieltro amarillo verdoso, costura blanca y luz de arriba a la izquierda.
 const SVG = `
 <svg viewBox="-12 -12 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <circle r="10.6" fill="#E8463A" stroke="#3A2212" stroke-width="2.4"/>
-  <path d="M-10 -1.5 C -4 3, 4 3, 10 -1.5" fill="none" stroke="#FFF4DC" stroke-width="2.6" stroke-linecap="round"/>
-  <ellipse cx="-3.8" cy="-5" rx="2.6" ry="1.6" fill="#fff" opacity=".55"/>
+  <defs>
+    <radialGradient id="tb" cx="-0.35" cy="-0.4" r="1.25" gradientUnits="objectBoundingBox" fx="0.32" fy="0.3">
+      <stop offset="0" stop-color="#F4FF8A"/><stop offset=".55" stop-color="#C9E030"/><stop offset="1" stop-color="#7E9614"/>
+    </radialGradient>
+  </defs>
+  <circle r="11" fill="url(#tb)"/>
+  <path d="M-8.2 -7.2 C-2.5 -3 -2.5 3 -8.2 7.2 M8.2 -7.2 C2.5 -3 2.5 3 8.2 7.2" fill="none" stroke="#FBFBF2" stroke-width="1.6" stroke-linecap="round"/>
+  <circle r="11" fill="none" stroke="#6B7F10" stroke-width=".7" opacity=".6"/>
 </svg>`;
 
 export class Ball implements BallTarget {
@@ -30,6 +36,8 @@ export class Ball implements BallTarget {
   throwId = 1;
   private spin = 0;
   private readonly el: HTMLDivElement;
+  private readonly shadow: HTMLDivElement;
+  private floorY = 0;
   /** Radio en píxeles. */
   readonly r: number;
   /** Para calcular con qué fuerza la lanzas. */
@@ -44,7 +52,9 @@ export class Ball implements BallTarget {
     this.el.style.width = `${this.r * 2}px`;
     this.el.style.height = `${this.r * 2}px`;
     this.el.innerHTML = SVG;
-    parent.appendChild(this.el);
+    this.shadow = document.createElement('div');
+    this.shadow.className = 'prop-shadow';
+    parent.append(this.shadow, this.el);
   }
 
   get grabbable(): boolean {
@@ -132,6 +142,14 @@ export class Ball implements BallTarget {
       this.spin += (this.vx * dt) / this.r;
     }
     this.el.style.transform = `translate(${Math.round(this.x - this.r)}px, ${Math.round(this.y - this.r)}px) rotate(${this.spin}rad)`;
+    // Sombra en el suelo: se achica y se aclara mientras la pelota sube.
+    this.floorY = floorY;
+    const air = Math.min(1, Math.max(0, (floorY - this.r - this.y) / 200));
+    const sw = this.r * 2.1 * (1 - 0.5 * air);
+    this.shadow.style.width = `${sw}px`;
+    this.shadow.style.height = `${this.r * 0.55}px`;
+    this.shadow.style.opacity = String(0.6 * (1 - air) * (this.holder === 'dog' ? 0.4 : 1));
+    this.shadow.style.transform = `translate(${Math.round(this.x - sw / 2)}px, ${Math.round(this.floorY - this.r * 0.3)}px)`;
   }
 
   /** ¿Se está moviendo? (para dibujar a pleno ritmo). */
@@ -141,5 +159,6 @@ export class Ball implements BallTarget {
 
   remove(): void {
     this.el.remove();
+    this.shadow.remove();
   }
 }
