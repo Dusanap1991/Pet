@@ -29,8 +29,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 CONFIG = os.path.join(ROOT, 'scripts', 'clips', 'clips.json')
 OUT_DIR = os.path.join(ROOT, 'assets', 'dog')
 
-# Resolución de trabajo: los videos de 1280x720 se procesan a la mitad.
-WORK_W = 640
+# Resolución de trabajo: los videos de 1280x720 se procesan a 960 px de ancho (nítido en pantallas Retina).
+WORK_W = 960
 
 
 def read_frames(src, start, end, fps):
@@ -51,14 +51,15 @@ def read_frames(src, start, end, fps):
 
 
 def key(frame, treadmill_top):
-    """Alfa por cuadro: fuera el verde (fondo y piso) y, bajo `treadmill_top`, lo gris u oscuro (la cinta)."""
+    """Alfa por cuadro: fuera el verde (fondo y piso) y, bajo la cinta, lo que no sea pata."""
+    from PIL import ImageFilter
     f = frame.astype(np.float32)
     r, g, b = f[..., 0], f[..., 1], f[..., 2]
+    h, w = frame.shape[:2]
+    k = w / 640.0
     gdom = g - np.maximum(r, b)
-    alpha = np.clip((30.0 - gdom) / (30.0 - 10.0), 0, 1)
+    alpha = np.clip((34.0 - gdom) / (34.0 - 8.0), 0, 1)
     if treadmill_top is not None:
-        h = frame.shape[0]
-        mx, mn = f.max(axis=2), f.min(axis=2)
         top = int(treadmill_top * h)
         # Dónde empieza la cinta en este cuadro: la primera fila (bajo la mitad) que es gris oscura
         # en buena parte del ancho. Así el corte calza aunque la cinta salga más arriba o más abajo.
@@ -67,24 +68,53 @@ def key(frame, treadmill_top):
         frac = dark.mean(axis=1)
         rows_dark = np.nonzero(frac[h // 2:] > 0.35)[0]
         if len(rows_dark):
-            top = h // 2 + int(rows_dark[0]) - 2
+            top = h // 2 + int(rows_dark[0]) - int(2 * k)
         # En la zona de la cinta solo se quedan las patas: tonos café rojizos.
         brown = (r - np.maximum(g, b)) > 6
         rows = np.arange(h)[:, None] >= top
         alpha = np.where(rows & ~brown, 0, alpha)
-        # Sobre la cinta solo pueden estar las patas: fuera de lo que queda bajo el cuerpo, todo afuera
-        # (así se van las etiquetas y esquinas de colores de la cinta).
-        above = alpha[max(0, top - 50): top] > 0.5
+        # Sobre la cinta solo pueden estar las patas: fuera de lo que queda bajo el cuerpo, todo afuera.
+        above = alpha[max(0, top - int(50 * k)): top] > 0.5
         cols = np.nonzero(above.any(axis=0))[0]
         if len(cols):
-            x0, x1 = max(0, cols.min() - 22), min(alpha.shape[1], cols.max() + 22)
-            outside = np.ones(alpha.shape[1], bool)
+            x0, x1 = max(0, cols.min() - int(22 * k)), min(w, cols.max() + int(22 * k))
+            outside = np.ones(w, bool)
             outside[x0:x1] = False
             alpha[top:, outside] = 0
-    # Despeje del reflejo verde en el borde del pelo.
-    g2 = np.minimum(g, np.maximum(r, b) * 1.02 + 4)
-    rgb = np.stack([r, g2, b], axis=-1)
-    return rgb, alpha
+        # Las líneas finas (el borde de la cinta) se van con una "apertura": lo que mide 1-3 px desaparece.
+        zone = slice(max(0, top - int(6 * k)), h)
+        img = Image.fromarray((alpha[zone] * 255).astype(np.uint8), 'L')
+        size = 5 if k > 1.2 else 3
+        opened = np.asarray(img.filter(ImageFilter.MinFilter(size)).filter(ImageFilter.MaxFilter(size)), np.float32) / 255
+        alpha[zone] = np.minimum(alpha[zone], opened)
+
+    # Borde suave (sin escalones).
+    a_img = Image.fromarray((alpha * 255).astype(np.uint8), 'L').filter(ImageFilter.GaussianBlur(0.6 * k))
+    alpha = np.minimum(alpha, np.asarray(a_img, np.float32) / 255 + 0.0) * 0.5 + np.asarray(a_img, np.float32) / 255 * 0.5
+
+    # Descontaminar el borde: en los pixeles semitransparentes se resta el verde del fondo que se mezcló.
+    bg_mask = alpha < 0.02
+    bg = np.median(f[bg_mask], axis=0) if bg_mask.sum() > 100 else np.array([88, 142, 96], np.float32)
+    a3 = np.clip(alpha, 0.12, 1)[..., None]
+    edge = ((alpha > 0.02) & (alpha < 0.97))[..., None]
+    fg = np.clip((f - (1 - a3) * bg) / a3, 0, 255)
+    f = np.where(edge, fg, f)
+    r, g, b = f[..., 0], f[..., 1], f[..., 2]
+    # Reflejo verde en el pelo: en el borde se elimina del todo, adentro casi.
+    limit = np.where(alpha < 0.97, np.maximum(r, b), np.maximum(r, b) * 1.03 + 3)
+    g = np.minimum(g, limit)
+    # En el pelo café en sombra (panza, entre las patas) el rebote verde da un tono oliva: se lleva el
+    # verde a la proporción normal del pelo. No toca lo gris o negro (nariz, ojos) ni lo rosado (lengua).
+    brownish = (r - b) > 25
+    g = np.where(brownish, np.minimum(g, r * 0.72 + 4), g)
+    rgb = np.stack([r, g, b], axis=-1)
+    # Retoque de color suave: un poco más de saturación y calidez (la pantalla verde apaga el colorado).
+    lum = (rgb * np.array([0.299, 0.587, 0.114], np.float32)).sum(axis=-1, keepdims=True)
+    rgb = lum + (rgb - lum) * 1.12
+    rgb = (rgb - 128) * 1.04 + 128
+    rgb[..., 0] *= 1.02
+    rgb[..., 2] *= 0.97
+    return np.clip(rgb, 0, 255), alpha
 
 
 def connected(alpha):
@@ -102,7 +132,7 @@ def connected(alpha):
     ImageDraw.floodfill(img, (int(xs[k]), int(ys[k])), 128)
     keep = (np.asarray(img) == 128).astype(np.uint8) * 255
     # Un poco más ancho, para no comerse el borde suave del pelo.
-    keep = np.asarray(Image.fromarray(keep, 'L').filter(ImageFilter.MaxFilter(5))) > 0
+    keep = np.asarray(Image.fromarray(keep, 'L').filter(ImageFilter.MaxFilter(7))) > 0
     return alpha * keep
 
 
@@ -123,7 +153,7 @@ def clean(alpha):
     return out
 
 
-MASK_CELL = 6
+MASK_CELL = 9
 
 
 def write_mask(name, alphas):
@@ -132,7 +162,7 @@ def write_mask(name, alphas):
     import base64
     n, h, w = alphas.shape
     cols, rows = (w + MASK_CELL - 1) // MASK_CELL, (h + MASK_CELL - 1) // MASK_CELL
-    frames, heads, noses = [], [], []
+    frames, heads, noses, feet, spans = [], [], [], [], []
     for a in alphas:
         pad = np.zeros((rows * MASK_CELL, cols * MASK_CELL), np.float32)
         pad[:h, :w] = a
@@ -140,16 +170,31 @@ def write_mask(name, alphas):
         frames.append(base64.b64encode(np.packbits(cells.flatten()).tobytes()).decode())
         ys, xs = np.nonzero(a > 0.5)
         if len(ys) == 0:
-            heads.append([w / 2, 0]); noses.append([w, h / 2]); continue
+            heads.append([w / 2, 0]); noses.append([w, h / 2]); feet.append([]); spans.append([0, w]); continue
         top = ys.min()
         heads.append([float(np.median(xs[ys <= top + 6])), float(top)])
+        # Patas apoyadas: columnas con perro en las filas más bajas (para la sombra de contacto).
+        bottom = int(np.percentile(ys, 99.5))
+        band = a[max(0, bottom - 8): bottom + 1] > 0.5
+        fcols = np.nonzero(band.any(axis=0))[0]
+        runs, start = [], None
+        for c in range(len(fcols)):
+            if start is None:
+                start = fcols[c]
+            if c == len(fcols) - 1 or fcols[c + 1] - fcols[c] > 3:
+                runs.append([round(float((start + fcols[c]) / 2), 1), round(float(fcols[c] - start + 1), 1)])
+                start = None
+        feet.append(runs[:6])
+        lows = xs[ys > top + (bottom - top) * 0.55]
+        spans.append([round(float(lows.min()), 1), round(float(lows.max()), 1)] if len(lows) else [0, float(w)])
         upper = ys < top + (ys.max() - top) * 0.45
         k = np.argmax(np.where(upper, xs, -1))
         noses.append([float(xs[k]), float(ys[k])])
     with open(os.path.join(OUT_DIR, f'{name}.mask.json'), 'w') as fh:
         json.dump({'cell': MASK_CELL, 'cols': int(cols), 'rows': int(rows), 'frames': frames,
                    'head': [[round(x, 1), round(y, 1)] for x, y in heads],
-                   'nose': [[round(x, 1), round(y, 1)] for x, y in noses]}, fh, separators=(',', ':'))
+                   'nose': [[round(x, 1), round(y, 1)] for x, y in noses],
+                   'feet': feet, 'span': spans}, fh, separators=(',', ':'))
 
 
 def smooth(values, win):
@@ -206,6 +251,40 @@ def process(name, spec, fps):
                 rgbs[k] = np.roll(rgbs[k], shift[k], axis=1)
                 alphas[k] = np.roll(alphas[k], shift[k], axis=1)
 
+    # Velocidad del suelo (cinta): cuánto retroceden las patas apoyadas de un cuadro al siguiente.
+    # Con eso el perro avanza en pantalla al mismo ritmo que sus patas y no "patina".
+    ground_speed = None
+    if spec.get('treadmillTop') is not None:
+        moves = []
+        prev = None
+        for k in range(len(alphas)):
+            m = alphas[k] > 0.5
+            ys_, xs_ = np.nonzero(m)
+            if len(ys_) == 0:
+                prev = None
+                continue
+            bottom = int(np.percentile(ys_, 99.5))
+            band = m[max(0, bottom - 5): bottom + 1].any(axis=0)
+            cols = np.nonzero(band)[0]
+            centers, start = [], None
+            for c in range(len(cols)):
+                if start is None:
+                    start = cols[c]
+                if c == len(cols) - 1 or cols[c + 1] - cols[c] > 3:
+                    centers.append((start + cols[c]) / 2)
+                    start = None
+            if prev is not None:
+                for c in centers:
+                    d = min(prev, key=lambda q: abs(q - c)) if prev else None
+                    if d is not None and abs(c - d) < 20 * WORK_W / 640:
+                        moves.append(c - d)
+            prev = centers
+        if moves:
+            back = [m for m in moves if m < -0.15]
+            if len(back) > len(moves) * 0.25:
+                ground_speed = float(-np.median(back) * fps)
+        print(f'  velocidad de la cinta: {ground_speed and round(ground_speed)} px/s')
+
     # Repetición sin salto.
     kind = spec.get('kind', 'loop')
     if kind == 'loop':
@@ -231,7 +310,7 @@ def process(name, spec, fps):
     # Recorte común con margen.
     union = (alphas > 0.08).any(axis=0)
     ys, xs = np.nonzero(union)
-    m = 6
+    m = 9
     x0, x1 = max(0, xs.min() - m), min(w, xs.max() + m)
     y0, y1 = max(0, ys.min() - m), min(h, ys.max() + m)
     x1 = x0 + (x1 - x0) // 2 * 2
@@ -272,6 +351,8 @@ def process(name, spec, fps):
         # Punto de apoyo dentro del recorte (base de las patas, centro del cuerpo).
         'anchorX': float(np.mean(cx) + shift.mean() - x0),
         'anchorY': ground - y0,
+        # Pixeles del video por segundo que avanza el suelo bajo las patas (solo clips en cinta).
+        'groundSpeed': ground_speed,
     }
 
 

@@ -23,6 +23,9 @@ export type PetEvent =
   | { type: 'stretch' }
   | { type: 'ambient'; kind: Ambient }
   | { type: 'come'; x: number }
+  | { type: 'breathe' }
+  | { type: 'dnd'; on: boolean }
+  | { type: 'timer'; endsAt: number | null; icon: string; label: string }
   | { type: 'mood'; joy: number; food: number }
   | { type: 'ball'; out: boolean };
 

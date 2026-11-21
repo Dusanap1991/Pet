@@ -33,6 +33,10 @@ export class FocusSession {
     return false;
   }
 
+  remainingMs(now: number): number {
+    return this.endsAt === null ? 0 : Math.max(0, this.endsAt - now);
+  }
+
   remainingMin(now: number): number {
     return this.endsAt === null ? 0 : Math.max(0, Math.ceil((this.endsAt - now) / 60_000));
   }

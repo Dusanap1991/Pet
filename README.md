@@ -19,8 +19,7 @@ Para Windows y macOS.
 - **Te cuida**: avisa cuando llevas mucho rato sin parar (50 minutos por defecto).
 - **Te recuerda tomar agua**: desde que abre, cada 45 minutos (se puede cambiar o
   apagar). Si no estás o estás en foco, espera a que vuelvas.
-- **Recordatorios y temporizadores**: "en 20 minutos" o "a las 16:00", una vez o
-  todos los días. El perro ladra y deja el mensaje hasta que le haces clic. Se
+- **Recordatorios y temporizadores**: "en 20 minutos", "a las 16:00" o en una fecha. El perro ladra y deja el mensaje hasta que le haces clic. Se
   guardan aunque cierres la app.
 - **Se esconde cuando estorba**: lo ocultas por 30 minutos, 1 o 2 horas y vuelve
   solo. En macOS se esconde además cuando hay una app en pantalla completa.
@@ -57,6 +56,14 @@ Para Windows y macOS.
   marcas tus hábitos (con su racha) y cuentas cómo estuvo tu día.
 - **Ven aquí**: `Control` + `Alt` + `V` (o desde el menú) y el perro corre hasta el
   cursor, incluso si está en otra pantalla.
+- **No molestar**: 30 minutos, 1 hora, 2 horas o hasta mañana. Los avisos esperan;
+  tus recordatorios y reuniones siguen llegando, sin ladrido.
+- **Recordatorios que se repiten**: todos los días, de lunes a viernes, un día de
+  la semana o cada año (cumpleaños y aniversarios).
+- **Respiración guiada**: 1 minuto de respiración en caja (4-4-4-4).
+- **Notas**: un bloc de notas que se guarda solo.
+- **Frase del día** en el saludo de la mañana y **tiempo de foco visible** junto al
+  perro durante una sesión de foco o un Pomodoro.
 - **Logros**: 22 medallas en "Mi día" (rachas, vasos de agua, focos, tareas…).
 - **Juega y hace gracias**: si mueves el mouse rápido cerca del suelo, hace una
   reverencia y lo persigue; además bosteza, se estira, se sacude y persigue su cola.

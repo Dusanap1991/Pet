@@ -12,19 +12,27 @@ const form = $<HTMLFormElement>('form');
 const text = $<HTMLInputElement>('text');
 const minutes = $<HTMLInputElement>('minutes');
 const time = $<HTMLInputElement>('time');
-const daily = $<HTMLInputElement>('daily');
+const repeat = $<HTMLSelectElement>('repeat');
+const weekday = $<HTMLSelectElement>('weekday');
+const date = $<HTMLInputElement>('date');
+const dateTime = $<HTMLInputElement>('dateTime');
+const yearly = $<HTMLInputElement>('yearly');
 const error = $<HTMLParagraphElement>('error');
 
-const mode = (): 'in' | 'at' => (form.elements.namedItem('mode') as RadioNodeList).value as 'in' | 'at';
-const setMode = (value: 'in' | 'at'): void => {
+type Mode = 'in' | 'at' | 'date';
+const mode = (): Mode => (form.elements.namedItem('mode') as RadioNodeList).value as Mode;
+const setMode = (value: Mode): void => {
   (form.elements.namedItem('mode') as RadioNodeList).value = value;
   sync();
 };
 
-/** "Repetir todos los días" solo tiene sentido con una hora fija. */
+/** Cada opción de repetir solo tiene sentido con su modo. */
 function sync(): void {
-  daily.disabled = mode() !== 'at';
-  if (daily.disabled) daily.checked = false;
+  repeat.disabled = mode() !== 'at';
+  weekday.hidden = repeat.value !== 'weekly';
+  weekday.disabled = repeat.disabled;
+  yearly.disabled = mode() !== 'date';
+  if (yearly.disabled) yearly.checked = false;
 }
 
 // Propone la próxima hora en punto.
@@ -34,6 +42,11 @@ time.value = `${String(soon.getHours()).padStart(2, '0')}:00`;
 form.addEventListener('change', sync);
 minutes.addEventListener('focus', () => setMode('in'));
 time.addEventListener('focus', () => setMode('at'));
+repeat.addEventListener('focus', () => setMode('at'));
+date.addEventListener('focus', () => setMode('date'));
+dateTime.addEventListener('focus', () => setMode('date'));
+weekday.value = String(new Date().getDay());
+date.value = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 sync();
 
 form.addEventListener('submit', (event) => {
@@ -53,14 +66,24 @@ form.addEventListener('submit', (event) => {
       return;
     }
     request.minutes = n;
-  } else {
+  } else if (request.mode === 'at') {
     if (!time.value) {
       error.textContent = 'Elige una hora.';
       time.focus();
       return;
     }
     request.time = time.value;
-    request.daily = daily.checked;
+    request.repeat = repeat.value as ReminderRequest['repeat'];
+    if (request.repeat === 'weekly') request.weekday = Number(weekday.value);
+  } else {
+    if (!date.value || !dateTime.value) {
+      error.textContent = 'Elige el día y la hora.';
+      date.focus();
+      return;
+    }
+    request.date = date.value;
+    request.time = dateTime.value;
+    request.yearly = yearly.checked;
   }
   window.reminderForm?.add(request);
 });

@@ -27,9 +27,34 @@
           <span>A las</span>
           <input id="time" type="time" />
         </label>
+        <div class="row sub">
+          <span>Repetir</span>
+          <select id="repeat" aria-label="Repetir">
+            <option value="none">No</option>
+            <option value="daily">Todos los días</option>
+            <option value="weekdays">De lunes a viernes</option>
+            <option value="weekly">Cada semana, el</option>
+          </select>
+          <select id="weekday" aria-label="Día de la semana">
+            <option value="1">lunes</option>
+            <option value="2">martes</option>
+            <option value="3">miércoles</option>
+            <option value="4">jueves</option>
+            <option value="5">viernes</option>
+            <option value="6">sábado</option>
+            <option value="0">domingo</option>
+          </select>
+        </div>
+        <label class="row">
+          <input type="radio" name="mode" value="date" />
+          <span>El día</span>
+          <input id="date" type="date" />
+          <span>a las</span>
+          <input id="dateTime" type="time" value="09:00" />
+        </label>
         <label class="row sub">
-          <input id="daily" type="checkbox" />
-          <span>Repetir todos los días a esa hora</span>
+          <input id="yearly" type="checkbox" />
+          <span>Repetir cada año (cumpleaños, aniversarios)</span>
         </label>
       </fieldset>
 

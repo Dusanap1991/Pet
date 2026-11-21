@@ -30,8 +30,9 @@ import { HabitStore } from './habits';
 import { isFullscreen, watchWindows, type WindowRect } from './fullscreen';
 import { Mood, foodLabel, joyLabel } from './mood';
 import { Pomodoro, POMODORO } from './pomodoro';
+import { quoteOfDay } from './quotes';
 import { parseQuick } from './quick';
-import { ReminderStore, parseRequest } from './reminders';
+import { ReminderStore, parseRequest, repeatLabel } from './reminders';
 import { DailyTrigger, FRIDAY, WEEKDAYS, parseHHMM } from './schedule';
 import { StatsStore } from './stats';
 import { forecastUrl, geocodeUrl, parseForecast, parsePlace, weatherMessage, type Place } from './weather';
@@ -106,7 +107,7 @@ let lastMoodSent = '';
 let currentDay = '';
 let ballOut = false;
 const panels: Partial<Record<PanelKind, BrowserWindow>> = {};
-type PanelKind = 'day' | 'settings' | 'quick';
+type PanelKind = 'day' | 'settings' | 'quick' | 'notes';
 
 const pomodoro = new Pomodoro();
 let achievements: Achievements;
@@ -122,6 +123,16 @@ let earlyCountedDay = '';
 let shortcutsOk = true;
 let habits: HabitStore;
 let ambientNow: Ambient = 'off';
+/** "No molestar" activo hasta esta hora (ms), o null. */
+let dndUntil: number | null = null;
+let lastTimerKey = '';
+const morningQuote = new DailyTrigger(360);
+/** Cola de mensajes: si llegan dos casi juntos, el segundo espera a que se alcance a leer el primero. */
+const noticeQueue: string[] = [];
+let lastNoticeAt = 0;
+let noticeTimer: NodeJS.Timeout | undefined;
+const NOTICE_GAP_MS = 7000;
+const NOTES_MAX = 100_000;
 
 const SHORTCUTS = { note: 'Control+Alt+N', focus: 'Control+Alt+F', pet: 'Control+Alt+P', come: 'Control+Alt+V' } as const;
 const AMBIENTS: [Ambient, string][] = [['off', 'Apagado'], ['rain', 'Lluvia'], ['waves', 'Olas'], ['brown', 'Ruido marrón']];
@@ -296,8 +307,8 @@ function openReminderForm(): void {
     return;
   }
   reminderWin = new BrowserWindow({
-    width: 400,
-    height: 340,
+    width: 450,
+    height: 420,
     useContentSize: true,
     title: 'Nuevo recordatorio',
     show: false,
@@ -342,7 +353,9 @@ function startTimer(minutes: number): void {
 function clock(at: number): string {
   const d = new Date(at);
   const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return d.toDateString() === new Date().toDateString() ? hhmm : `mañana ${hhmm}`;
+  if (d.toDateString() === new Date().toDateString()) return hhmm;
+  if (d.toDateString() === new Date(Date.now() + 86_400_000).toDateString()) return `mañana ${hhmm}`;
+  return `${d.toLocaleDateString('es', { day: 'numeric', month: 'short' })} ${hhmm}`;
 }
 
 function remindersMenu(): MenuItemConstructorOptions {
@@ -356,7 +369,7 @@ function remindersMenu(): MenuItemConstructorOptions {
     for (const r of pending) {
       const text = r.text.length > 40 ? `${r.text.slice(0, 39)}…` : r.text;
       submenu.push({
-        label: `${clock(r.at)} · ${text}${r.daily ? ' (diario)' : ''}`,
+        label: `${clock(r.at)} · ${text}${repeatLabel(r) ? ` (${repeatLabel(r)})` : ''}`,
         click: () => {
           reminders.remove(r.id);
           refreshTray();
@@ -417,7 +430,7 @@ function openPanel(kind: PanelKind): void {
     existing.focus();
     return;
   }
-  const size = { day: [460, 820], settings: [500, 760], quick: [460, 150] }[kind];
+  const size = { day: [460, 820], settings: [500, 760], quick: [460, 150], notes: [440, 520] }[kind];
   const w = new BrowserWindow({
     width: size[0],
     height: size[1],
@@ -428,7 +441,7 @@ function openPanel(kind: PanelKind): void {
     minimizable: kind !== 'quick',
     maximizable: kind !== 'quick',
     alwaysOnTop: kind === 'quick',
-    title: { day: 'Mi día', settings: 'Ajustes', quick: 'Nota rápida' }[kind],
+    title: { day: 'Mi día', settings: 'Ajustes', quick: 'Nota rápida', notes: 'Notas' }[kind],
     show: false,
     autoHideMenuBar: true,
     fullscreenable: false,
@@ -456,7 +469,7 @@ function openPanel(kind: PanelKind): void {
 }
 
 function panelOf(event: Electron.IpcMainInvokeEvent | IpcMainEvent): PanelKind | null {
-  for (const kind of ['day', 'settings', 'quick'] as const) {
+  for (const kind of ['day', 'settings', 'quick', 'notes'] as const) {
     const w = panels[kind];
     if (w && !w.isDestroyed() && event.sender === w.webContents) return kind;
   }
@@ -548,6 +561,23 @@ function registerPanelHandlers(): void {
     send({ type: 'notice', text: score >= 4 ? `¡Qué bueno! ${MOOD_EMOJI[score]}` : score === 3 ? 'Gracias por contarme.' : `Mañana será mejor. Aquí estoy ${MOOD_EMOJI[score]}` });
     return true;
   });
+  const notesFile = (): string => path.join(app.getPath('userData'), 'notes.txt');
+  handle('notes:get', ['notes'], () => {
+    try {
+      return fs.readFileSync(notesFile(), 'utf8');
+    } catch {
+      return '';
+    }
+  });
+  handle('notes:set', ['notes'], (text) => {
+    if (typeof text !== 'string') return false;
+    try {
+      fs.writeFileSync(notesFile(), text.slice(0, NOTES_MAX));
+      return true;
+    } catch {
+      return false;
+    }
+  });
   handle('task:remove', ['day'], (id) => {
     if (typeof id === 'string') tasks.remove(id);
     refreshTray();
@@ -578,12 +608,14 @@ function registerPanelHandlers(): void {
     style: settings.style,
     waterGoal: settings.waterGoal,
     waterGoals: WATER_GOALS,
+    dailyQuote: settings.dailyQuote,
+    showTimer: settings.showTimer,
   }));
   handle('settings:set', ['settings'], (patch) => {
     if (typeof patch !== 'object' || patch === null) return false;
     const allowed = [
       'name', 'sound', 'calendarUrl', 'meetingLeadMin', 'dropFolder', 'deviceAlerts', 'taskNudges', 'quietInMeetings',
-      'shortcuts', 'endOfDay', 'endOfDayTime', 'weeklySummary', 'lateNight', 'eyeBreaks', 'weatherCity', 'costumes', 'coat', 'style', 'waterGoal',
+      'shortcuts', 'endOfDay', 'endOfDayTime', 'weeklySummary', 'lateNight', 'eyeBreaks', 'weatherCity', 'costumes', 'coat', 'style', 'waterGoal', 'dailyQuote', 'showTimer',
     ];
     const picked = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     const next = sanitizeSettings({ ...settings, ...picked });
@@ -861,13 +893,91 @@ function inMeeting(now: number): boolean {
   return settings.quietInMeetings && !!settings.calendarUrl && currentMeeting(meetings, now) !== null;
 }
 
-/** Un aviso que no es urgente: durante una reunión espera a que termine. */
+function inDnd(now: number): boolean {
+  return dndUntil !== null && now < dndUntil;
+}
+
+/** Un aviso que no es urgente: durante una reunión o con "No molestar" espera a que termine. */
 function gentle(text: string): void {
-  if (inMeeting(Date.now())) {
+  const now = Date.now();
+  if (inMeeting(now) || inDnd(now)) {
     if (!meetingHeld.includes(text) && meetingHeld.length < 6) meetingHeld.push(text);
     return;
   }
-  send({ type: 'notice', text });
+  queueNotice(text);
+}
+
+/** Muestra un mensaje; si hace poco se mostró otro, espera unos segundos para no taparlo. */
+function queueNotice(text: string): void {
+  if (noticeQueue.includes(text)) return;
+  noticeQueue.push(text);
+  flushNotices();
+}
+
+function flushNotices(): void {
+  if (noticeTimer || noticeQueue.length === 0) return;
+  const wait = Math.max(0, lastNoticeAt + NOTICE_GAP_MS - Date.now());
+  noticeTimer = setTimeout(() => {
+    noticeTimer = undefined;
+    const text = noticeQueue.shift();
+    if (text) {
+      lastNoticeAt = Date.now();
+      send({ type: 'notice', text });
+    }
+    flushNotices();
+  }, wait);
+}
+
+function setDnd(minutes: number | 'tomorrow' | null): void {
+  if (minutes === null) {
+    dndUntil = null;
+  } else if (minutes === 'tomorrow') {
+    const t = new Date();
+    t.setDate(t.getDate() + 1);
+    t.setHours(8, 0, 0, 0);
+    dndUntil = t.getTime();
+  } else {
+    dndUntil = Date.now() + minutes * 60_000;
+  }
+  send({ type: 'dnd', on: dndUntil !== null });
+  if (dndUntil) send({ type: 'notice', text: `🤫 No molesto hasta las ${clock(dndUntil).replace('mañana ', 'mañana a las ')}.` });
+  else send({ type: 'notice', text: '¡Volví a avisarte!' });
+  refreshTray();
+}
+
+function dndMenu(): MenuItemConstructorOptions {
+  if (inDnd(Date.now())) return { label: `Quitar "No molestar" (hasta ${clock(dndUntil!)})`, click: () => setDnd(null) };
+  return {
+    label: 'No molestar',
+    submenu: [
+      { label: '30 minutos', click: () => setDnd(30) },
+      { label: '1 hora', click: () => setDnd(60) },
+      { label: '2 horas', click: () => setDnd(120) },
+      { label: 'Hasta mañana', click: () => setDnd('tomorrow') },
+    ],
+  };
+}
+
+/** Lo que queda del foco o del Pomodoro, para la etiqueta junto al perro. */
+function syncTimer(): void {
+  let endsAt: number | null = null;
+  let icon = '';
+  let label = '';
+  const now = Date.now();
+  if (settings.showTimer && pomodoro.active) {
+    const step = pomodoro.current!;
+    endsAt = now + pomodoro.remainingMs(now);
+    icon = step.phase === 'focus' ? '🍅' : '☕';
+    label = step.phase === 'focus' ? `foco ${step.round}/${POMODORO.rounds}` : 'descanso';
+  } else if (settings.showTimer && focus.active) {
+    endsAt = now + focus.remainingMs(now);
+    icon = '🎯';
+    label = 'foco';
+  }
+  const key = endsAt === null ? 'none' : `${Math.round(endsAt / 1000)}|${label}`;
+  if (key === lastTimerKey) return;
+  lastTimerKey = key;
+  send({ type: 'timer', endsAt, icon, label });
 }
 
 function bump(counter: Counter, n = 1): void {
@@ -969,6 +1079,7 @@ function buildMenu(): Menu {
   const template: MenuItemConstructorOptions[] = [
     ...(settings.name ? [{ label: `🐶 ${settings.name}`, enabled: false }] : []),
     ...(inMeeting(Date.now()) ? [{ label: '📅 En reunión: avisos en pausa', enabled: false }] : []),
+    ...(inDnd(Date.now()) ? [{ label: `🤫 No molestar hasta ${clock(dndUntil!)}`, enabled: false }] : []),
     ...visibilityMenu(),
     { type: 'separator' },
     { label: 'Dar un premio', enabled: shown, click: () => send({ type: 'treat' }) },
@@ -984,6 +1095,12 @@ function buildMenu(): Menu {
       click: comeHere,
     },
     { label: 'Rutina de estiramiento (2 min)', click: startStretch },
+    { label: 'Respiración guiada (1 min)', click: () => {
+      showPet();
+      send({ type: 'breathe' });
+    } },
+    { label: 'Notas…', click: () => openPanel('notes') },
+    dndMenu(),
     {
       label: 'Sonido ambiente',
       submenu: [
@@ -1095,7 +1212,7 @@ function buildMenu(): Menu {
 function refreshTray(): void {
   if (!tray) return;
   tray.setContextMenu(buildMenu());
-  const title = settings.name || 'Pet';
+  const title = (settings.name || 'Pet') + (inDnd(Date.now()) ? ' · No molestar' : '');
   const now = Date.now();
   tray.setToolTip(
     pomodoro.active ? `${title}: Pomodoro, quedan ${pomodoro.remainingMin(now)} min`
@@ -1139,7 +1256,7 @@ function tickActivity(): void {
   const events = tracker.tick({
     now,
     idleSec,
-    breaksEnabled: settings.breakReminders && !focusing() && !inMeeting(now),
+    breaksEnabled: settings.breakReminders && !focusing() && !inMeeting(now) && !inDnd(now),
     breakEveryMin: settings.breakEveryMin,
   });
   for (const event of events) send(event);
@@ -1186,17 +1303,18 @@ function tickActivity(): void {
     enabled: settings.waterReminders && shown,
     everyMin: settings.waterEveryMin,
     away: tracker.isAway,
-    quiet: focusing() || inMeeting(now),
+    quiet: focusing() || inMeeting(now) || inDnd(now),
   });
   if (thirsty) {
     lastWaterAt = now;
     send({ type: 'water' });
   }
 
-  const tired = eyes.tick({ now, enabled: settings.eyeBreaks && shown, everyMin: 20, away: tracker.isAway, quiet: inMeeting(now) || thirsty });
+  const tired = eyes.tick({ now, enabled: settings.eyeBreaks && shown, everyMin: 20, away: tracker.isAway, quiet: inMeeting(now) || inDnd(now) || thirsty });
   if (tired) send({ type: 'eyes' });
 
   syncAmbient();
+  syncTimer();
   tickDay(now, shown);
 }
 
@@ -1245,15 +1363,21 @@ function tickDay(now: number, shown: boolean): void {
     if (now - calendarFetchedAt > CALENDAR_REFRESH_MS) void refreshCalendar();
   }
 
-  // Al terminar una reunión, entrega lo que quedó esperando.
-  const meetingNow = inMeeting(now);
+  // Al terminar una reunión o el "No molestar", entrega lo que quedó esperando.
+  const dndNow = inDnd(now);
+  if (dndUntil !== null && !dndNow) {
+    dndUntil = null;
+    send({ type: 'dnd', on: false });
+    refreshTray();
+  }
+  const meetingNow = inMeeting(now) || dndNow;
   if (meetingNow !== wasInMeeting) {
     wasInMeeting = meetingNow;
     refreshTray();
     if (!meetingNow && meetingHeld.length > 0) {
       const lines = meetingHeld.map((t) => `• ${t.split('\n')[0]}`).join('\n');
       meetingHeld = [];
-      setTimeout(() => send({ type: 'notice', text: `Mientras estabas en la reunión:\n${lines}` }), 3000);
+      setTimeout(() => queueNotice(`Mientras tanto:\n${lines}`), 3000);
     }
   }
 
@@ -1277,7 +1401,7 @@ function tickDay(now: number, shown: boolean): void {
     const more = pending.length > 3 ? `\n…y ${pending.length - 3} más` : '';
     const head = nudge === 'morning' ? `¡Buen día! Para hoy tienes ${pending.length}:` : `Te quedan ${pending.length} pendiente${pending.length === 1 ? '' : 's'}:`;
     water.postpone(now, 60_000);
-    send({ type: 'notice', text: `${head}\n${list}${more}` });
+    queueNotice(`${head}\n${list}${more}`);
   }
 
   const alerts = device.tick({
@@ -1297,7 +1421,7 @@ function tickDay(now: number, shown: boolean): void {
   sendMood();
   if (mood.hungry && !away && !quiet && now - lastHungerNudge > HUNGER_NUDGE_MS) {
     lastHungerNudge = now;
-    send({ type: 'notice', text: 'Tengo hambre… ¿me das un premio? 🦴' });
+    queueNotice('Tengo hambre… ¿me das un premio? 🦴');
   }
 
   tickDaily(now, away, meetingNow, shown);
@@ -1354,6 +1478,10 @@ function tickDaily(now: number, away: boolean, meetingNow: boolean, shown: boole
 
   if (lateNight.tick({ now, h: 23, m: 0, enabled: settings.lateNight, ready: ready && today.activeSec >= 10 * 60 })) {
     gentle('🌙 Ya es tarde. ¿Y si lo dejamos para mañana? Yo ya tengo sueño.');
+  }
+
+  if (morningQuote.tick({ now, h: 6, m: 0, enabled: settings.dailyQuote, ready: ready && today.activeSec >= 60 })) {
+    gentle(`💬 Frase del día: ${quoteOfDay(now)}`);
   }
 
   if (settings.weatherPlace && morningWeather.tick({ now, h: 6, m: 0, enabled: true, ready })) {
@@ -1462,6 +1590,9 @@ function start(): void {
     sendMood(true);
     if (ballOut) send({ type: 'ball', out: true });
     syncAmbient(true);
+    lastTimerKey = '';
+    syncTimer();
+    if (inDnd(Date.now())) send({ type: 'dnd', on: true });
     if (tracker.isAway) send({ type: 'away' });
     if (focus.active) send({ type: 'focus-start', minutes: focus.minutes });
     if (pomodoro.inFocus) send({ type: 'focus-start', minutes: pomodoro.remainingMin(Date.now()) });
@@ -1500,7 +1631,8 @@ function start(): void {
     if (!isFromReminderForm(event)) return;
     const reminder = parseRequest(raw, Date.now());
     if (reminder && reminders.add(reminder)) {
-      send({ type: 'notice', text: `Anotado: te aviso ${reminder.daily ? 'todos los días a las' : 'a las'} ${clock(reminder.at).replace('mañana ', '')}.` });
+      const every = repeatLabel({ id: '', ...reminder });
+      send({ type: 'notice', text: `Anotado: te aviso ${clock(reminder.at)}${every ? ` (${every})` : ''}.` });
     }
     reminderWin?.close();
     refreshTray();

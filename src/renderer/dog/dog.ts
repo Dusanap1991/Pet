@@ -135,6 +135,8 @@ export class Dog {
   /** Lo llamaron ("Ven aquí"): corre hasta esta x. */
   private comeX: number | null = null;
   mouthHint: { x: number; y: number } | null = null;
+  /** Velocidades medidas en los videos (unidades/s), para que las patas no patinen. */
+  photoSpeeds: { walk: number | null; run: number | null; sniff: number | null } = { walk: null, run: null, sniff: null };
   /** Giro hacia la cámara cuando está tranquilo (solo 3D): se ve de tres cuartos. */
   private turn = 0;
   /** Lo soltaron estando de frente: cae y aterriza sentado mirando hacia afuera. */
@@ -332,6 +334,12 @@ export class Dog {
   stretchAlong(): void {
     if (this.state === 'drag' || this.state === 'fall') return;
     this.enter('stretch', 2);
+  }
+
+  /** Durante la respiración guiada: se echa tranquilo a tu lado. */
+  restAlong(): void {
+    if (this.state === 'drag' || this.state === 'fall') return;
+    this.enter('lie', 70);
   }
 
   /** Algo nuevo se acerca (por ejemplo, archivos arrastrados): se pone atento. */
@@ -880,7 +888,12 @@ export class Dog {
   /** Avanza hacia `targetX`; devuelve true al llegar. */
   private moveToward(dt: number, speed: number): boolean {
     // En video el perro trota, no corre a toda velocidad: así las patas no patinan.
-    if (this.photo) speed = Math.min(speed, 90);
+    if (this.photo) {
+      const ps = this.photoSpeeds;
+      const s = this.state;
+      const measured = s === 'sniff' ? ps.sniff : s === 'walk' || s === 'carry' ? ps.walk : ps.run;
+      speed = measured ?? Math.min(speed, 90);
+    }
     const dx = this.targetX - this.x;
     const step = speed * this.scale * dt;
     const dist = Math.min(Math.abs(dx), step);

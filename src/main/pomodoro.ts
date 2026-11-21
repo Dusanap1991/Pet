@@ -27,6 +27,10 @@ export class Pomodoro {
     return this.step?.phase === 'focus';
   }
 
+  remainingMs(now: number): number {
+    return this.step ? Math.max(0, this.endsAt - now) : 0;
+  }
+
   remainingMin(now: number): number {
     return this.step ? Math.max(0, Math.ceil((this.endsAt - now) / 60_000)) : 0;
   }

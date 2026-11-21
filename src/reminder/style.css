@@ -79,7 +79,9 @@ legend {
 
 input[type="text"],
 input[type="number"],
-input[type="time"] {
+input[type="time"],
+input[type="date"],
+select {
   padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 8px;

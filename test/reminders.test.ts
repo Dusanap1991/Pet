@@ -51,3 +51,34 @@ test('se guardan en disco, se pueden borrar y un archivo dañado no rompe nada',
   assert.deepEqual(new ReminderStore(file).list.map((r) => r.text), ['b']);
   assert.deepEqual(new ReminderStore(join(tmpdir(), 'no-existe-pet.json')).list, []);
 });
+
+import { nextRepeat, repeatLabel } from '../src/main/reminders';
+
+// 2026-01-16 es viernes.
+const t = (mo: number, d: number, h: number, m = 0, y = 2026): number => new Date(y, mo - 1, d, h, m).getTime();
+
+test('repeticiones: lunes a viernes, un día de la semana y cada año', () => {
+  assert.equal(nextRepeat({ kind: 'weekdays', h: 9, m: 0 }, t(1, 16, 8)), t(1, 16, 9), 'viernes antes de la hora');
+  assert.equal(nextRepeat({ kind: 'weekdays', h: 9, m: 0 }, t(1, 16, 10)), t(1, 19, 9), 'salta el fin de semana');
+  assert.equal(nextRepeat({ kind: 'weekly', h: 18, m: 30, day: 3 }, t(1, 16, 10)), t(1, 21, 18, 30), 'próximo miércoles');
+  assert.equal(nextRepeat({ kind: 'yearly', h: 9, m: 0, month: 3, date: 5 }, t(1, 16, 10)), t(3, 5, 9));
+  assert.equal(nextRepeat({ kind: 'yearly', h: 9, m: 0, month: 1, date: 2 }, t(1, 16, 10)), t(1, 2, 9, 0, 2027));
+  assert.equal(nextRepeat({ kind: 'yearly', h: 9, m: 0, month: 2, date: 29 }, t(3, 1, 10)), t(2, 28, 9, 0, 2027), '29 de febrero en año no bisiesto');
+});
+
+test('el formulario acepta repetir y fechas; la tienda vuelve a programarlos', () => {
+  const now = t(1, 16, 10);
+  const weekly = parseRequest({ text: 'Basura', mode: 'at', time: '20:00', repeat: 'weekly', weekday: 2 }, now)!;
+  assert.equal(weekly.at, t(1, 20, 20));
+  assert.equal(repeatLabel({ id: 'x', ...weekly }), 'martes');
+  const bday = parseRequest({ text: 'Cumpleaños de Ana', mode: 'date', date: '2026-01-10', time: '09:00', yearly: true }, now)!;
+  assert.equal(bday.at, t(1, 10, 9, 0, 2027), 'ya pasó este año: el próximo');
+  assert.equal(parseRequest({ text: 'x', mode: 'date', date: '2026-01-10', time: '09:00' }, now), null, 'una sola vez en el pasado');
+  assert.equal(parseRequest({ text: 'x', mode: 'date', date: '2026-02-31', time: '09:00' }, now), null, 'fecha inválida');
+  assert.equal(parseRequest({ text: 'x', mode: 'at', time: '09:00', repeat: 'weekly', weekday: 9 }, now), null);
+
+  const store = new ReminderStore();
+  store.add(weekly);
+  assert.equal(store.takeDue(t(1, 20, 20, 1)).length, 1);
+  assert.equal(store.list[0].at, t(1, 27, 20), 'una semana después');
+});

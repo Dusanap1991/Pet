@@ -41,6 +41,9 @@ export interface Settings {
   ambient: Ambient;
   /** El sonido ambiente solo suena durante el foco. */
   ambientFocusOnly: boolean;
+  dailyQuote: boolean;
+  /** Mostrar junto al perro cuánto queda del foco o del Pomodoro. */
+  showTimer: boolean;
   /** Pantalla donde vive el perro; sin valor, la principal. */
   displayId?: number;
 }
@@ -74,6 +77,8 @@ export const DEFAULT_SETTINGS: Settings = {
   waterGoal: 8,
   ambient: 'off',
   ambientFocusOnly: true,
+  dailyQuote: true,
+  showTimer: true,
 };
 
 export const WATER_GOALS = [6, 8, 10, 12] as const;
@@ -129,6 +134,8 @@ export function sanitizeSettings(raw: unknown): Settings {
   if (typeof r.waterGoal === 'number' && (WATER_GOALS as readonly number[]).includes(r.waterGoal)) out.waterGoal = r.waterGoal;
   if (r.ambient === 'off' || r.ambient === 'rain' || r.ambient === 'waves' || r.ambient === 'brown') out.ambient = r.ambient;
   if (typeof r.ambientFocusOnly === 'boolean') out.ambientFocusOnly = r.ambientFocusOnly;
+  if (typeof r.dailyQuote === 'boolean') out.dailyQuote = r.dailyQuote;
+  if (typeof r.showTimer === 'boolean') out.showTimer = r.showTimer;
   if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;
 }

@@ -20,5 +20,6 @@ export const STR = {
   ] as [string, number][],
   stretchDone: '¡Listo! Te ves más despierto 💪',
   stretchStop: 'Lo dejamos aquí. ¡Cuando quieras seguimos!',
+  breatheDone: 'Listo. ¿Más tranquilo? 🌿',
   focusEnd: (min: number): string => `¡Listo! ${min} min de foco. Ahora toca un descanso.`,
 };

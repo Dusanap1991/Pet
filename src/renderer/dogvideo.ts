@@ -32,6 +32,10 @@ interface Mask {
   frames: string[];
   head: number[][];
   nose: number[][];
+  /** Patas apoyadas en cada cuadro: [centro x, ancho]. */
+  feet?: number[][][];
+  /** Ancho del cuerpo cerca del suelo: [x0, x1]. */
+  span?: number[][];
 }
 
 const MASKS: Record<ClipName, Mask> = {
@@ -97,6 +101,7 @@ export class DogVideo {
   private shownPose: Pose = 'stand';
   private transition: { clip: ClipName; then: ClipName } | null = null;
   private visible = true;
+  private lastFacing: 1 | -1 = 1;
   /** Cómo quedó ubicado el video en el último cuadro (para pasar de pantalla a video y viceversa). */
   private place = { left: 0, top: 0, k: 1, flip: false, squash: 1, tilt: 0, px: 0, py: 0 };
 
@@ -177,6 +182,28 @@ export class DogVideo {
     const [hx, hy] = MASKS[name].head[f];
     const [nx, ny] = MASKS[name].nose[f];
     return { head: this.toScreen(hx, hy), nose: this.toScreen(nx, ny) };
+  }
+
+  /** Para la sombra: dónde está el suelo, el ancho del cuerpo y cada pata apoyada, en pantalla. */
+  shadow(): { groundY: number; x0: number; x1: number; feet: { x: number; w: number }[] } | null {
+    const name = this.current;
+    if (!name) return null;
+    const m = MASKS[name];
+    const clip = manifest.clips[name];
+    const f = this.frameOf(name);
+    const ground = this.toScreen(clip.anchorX, clip.anchorY);
+    const span = m.span?.[f] ?? [0, clip.width];
+    const a = this.toScreen(span[0], clip.anchorY).x;
+    const b = this.toScreen(span[1], clip.anchorY).x;
+    const feet = (m.feet?.[f] ?? []).map(([x, w]) => ({ x: this.toScreen(x, clip.anchorY).x, w: w * this.place.k }));
+    return { groundY: ground.y, x0: Math.min(a, b), x1: Math.max(a, b), feet };
+  }
+
+  /** Velocidad del suelo en los videos con cinta, en unidades del dibujo por segundo (o null si no se midió). */
+  static groundSpeeds(): { walk: number | null; run: number | null; sniff: number | null } {
+    const toUnits = (px: number | null | undefined): number | null => (px ? (px * DOG_LENGTH_UNITS) / manifest.dogLengthPx : null);
+    const c = manifest.clips as Record<string, { groundSpeed?: number | null }>;
+    return { walk: toUnits(c.caminar?.groundSpeed), run: toUnits(c.correr?.groundSpeed), sniff: toUnits(c.olfatear?.groundSpeed) };
   }
 
   private target(view: VideoView): ClipName {
@@ -266,6 +293,15 @@ export class DogVideo {
     const px = x + view.pivotX, py = y + view.pivotY;
     this.place = { left, top, k, flip, squash: view.squash, tilt: view.tilt, px, py };
     const v = this.videos.get(name)!;
+    if (view.facing !== this.lastFacing) {
+      // Al darse vuelta: un parpadeo breve disimula el espejo instantáneo.
+      this.lastFacing = view.facing;
+      v.style.transition = 'none';
+      v.style.opacity = '0.25';
+      void v.offsetWidth;
+      v.style.transition = 'opacity 200ms ease-out';
+      v.style.opacity = '1';
+    }
     v.style.transform =
       `translate(${px}px, ${py}px) rotate(${view.tilt}rad) translate(${-px}px, ${-py}px) ` +
       `translate(${left}px, ${top}px) scale(${flip ? -k : k}, ${k * view.squash})`;

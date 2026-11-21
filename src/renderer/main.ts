@@ -3,6 +3,7 @@ import { Ball } from './ball';
 import type { Dog3D } from './dog3d/dog3d';
 import { DogVideo } from './dogvideo';
 import { Bubble } from './bubble';
+import { TimerPill } from './timer';
 import { DEMO_TASKBAR, setupDemo } from './demo';
 import { Dog, type World } from './dog/dog';
 import { Fx } from './fx';
@@ -41,6 +42,34 @@ function hitDog(x: number, y: number): boolean {
   return photo && dogVideo ? dogVideo.hitTest(x, y) : dog.hitTest(x, y);
 }
 
+/** Sombra del perro realista: una suave bajo el cuerpo y una más oscura bajo cada pata apoyada. */
+function drawVideoShadow(v: DogVideo): void {
+  const sh = v.shadow();
+  if (!sh) return;
+  const lift = Math.max(0, world.floorY - dog.y);
+  const air = Math.min(1, lift / (110 * scale));
+  if (air >= 1) return;
+  const fade = 1 - air;
+  const gy = world.floorY - dog.y + 1.5 * scale;
+  const soft = (cx: number, rx: number, ry: number, alpha: number): void => {
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, `rgba(30,22,16,${alpha})`);
+    g.addColorStop(0.55, `rgba(30,22,16,${alpha * 0.55})`);
+    g.addColorStop(1, 'rgba(30,22,16,0)');
+    ctx.save();
+    ctx.translate(cx - dog.x, gy);
+    ctx.scale(rx, ry);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+  const width = Math.max(20 * scale, sh.x1 - sh.x0);
+  soft((sh.x0 + sh.x1) / 2, (width / 2) * (1.08 - 0.25 * air), 9 * scale * (1 - 0.3 * air), 0.26 * fade);
+  for (const f of sh.feet) soft(f.x, Math.max(6 * scale, f.w * 0.9), 2.8 * scale, 0.32 * fade);
+}
+
 /** Perro realista: videos de un perro de verdad, debajo del lienzo 2D. */
 let dogVideo: DogVideo | null = null;
 let photo = false;
@@ -48,7 +77,10 @@ let photo = false;
 async function setStyle(style: '2d' | '3d' | 'photo'): Promise<void> {
   photo = style === 'photo';
   dog.photo = photo;
-  if (photo && !dogVideo) dogVideo = new DogVideo(stage, canvas, '../assets/dog/');
+  if (photo && !dogVideo) {
+    dogVideo = new DogVideo(stage, canvas, '../assets/dog/');
+    dog.photoSpeeds = DogVideo.groundSpeeds();
+  }
   dogVideo?.setVisible(photo);
   want3d = style === '3d';
   dog.style3d = want3d && !!dog3d;
@@ -88,63 +120,103 @@ async function setStyle(style: '2d' | '3d' | 'photo'): Promise<void> {
 const look: { coat: string; outfit: 'santa' | 'witch' | 'scarf' | null } = { coat: 'red', outfit: null };
 
 const fx = new Fx();
+const timerPill = new TimerPill(stage);
 const treats = new Treats(stage);
 const bubble = new Bubble(stage);
 
 let scale = SIZE_SCALE.m;
 let dpr = 1;
 let soundOn = false;
+/** "No molestar": sin ladridos. */
+let dnd = false;
 let ball: Ball | null = null;
 /** Cuándo fue el último aviso de agua: un clic en el perro poco después cuenta como "ya tomé". */
 let waterAskedAt = 0;
 const reports: PetReport[] = [];
 /** Cuándo avisó del descanso: un clic en el perro poco después empieza la rutina de estiramiento. */
 let breakAskedAt = 0;
-/** Rutina de estiramiento en curso. */
-let routine: { step: number; left: number; timer: number } | null = null;
+/** Rutina guiada en curso (estiramiento o respiración). */
+interface Guided {
+  steps: [string, number][];
+  icon: string;
+  done: string;
+  report?: PetReport;
+  /** Por cada paso: qué hace el perro. */
+  onStep?: (i: number) => void;
+}
+let routine: { g: Guided; step: number; left: number; timer: number } | null = null;
 
 function stopRoutine(done: boolean): void {
   if (!routine) return;
+  const g = routine.g;
   clearInterval(routine.timer);
   routine = null;
   if (done) {
-    dog.remind(STR.stretchDone, 5000);
-    report('stretched');
+    dog.remind(g.done, 5000);
+    if (g.report) report(g.report);
   } else {
     dog.remind(STR.stretchStop, 4000);
   }
 }
 
-/** Rutina guiada de 2 minutos: un paso a la vez, con cuenta regresiva en el globo. */
-function startRoutine(): void {
-  if (routine) return;
+/** Una rutina guiada: un paso a la vez, con cuenta regresiva en el globo. */
+function startGuided(g: Guided): void {
+  if (routine) stopRoutine(false);
   breakAskedAt = 0;
-  const steps = STR.stretchSteps;
   const show = (): void => {
     if (!routine) return;
-    const [text] = steps[routine.step];
+    const [text] = g.steps[routine.step];
     // Si llegó otro mensaje (un hábito, un aviso), se deja leer unos segundos antes de volver a la rutina.
-    if (!bubble.text.startsWith('🧘') && performance.now() - bubble.saidAt < 4000) return;
-    bubble.say(`🧘 ${routine.step + 1}/${steps.length} · ${text}\n${routine.left} s`, 2000);
+    if (!bubble.text.startsWith(g.icon) && performance.now() - bubble.saidAt < 4000) return;
+    bubble.say(`${g.icon} ${text}\n${routine.left} s`, 2000);
   };
   routine = {
+    g,
     step: 0,
-    left: steps[0][1],
+    left: g.steps[0][1],
     timer: window.setInterval(() => {
       if (!routine) return;
       routine.left--;
       if (routine.left <= 0) {
         routine.step++;
-        if (routine.step >= steps.length) return stopRoutine(true);
-        routine.left = steps[routine.step][1];
-        dog.stretchAlong();
-        if (soundOn) bark(1, 0.12);
+        if (routine.step >= g.steps.length) return stopRoutine(true);
+        routine.left = g.steps[routine.step][1];
+        g.onStep?.(routine.step);
       }
       show();
     }, 1000),
   };
-  dog.stretchAlong();
+  g.onStep?.(0);
+  // La pediste tú: se muestra de inmediato aunque haya otro mensaje en pantalla.
+  bubble.saidAt = 0;
   show();
+}
+
+function startRoutine(): void {
+  const n = STR.stretchSteps.length;
+  startGuided({
+    steps: STR.stretchSteps.map(([t, sec], i) => [`${i + 1}/${n} · ${t}`, sec] as [string, number]),
+    icon: '🧘',
+    done: STR.stretchDone,
+    report: 'stretched',
+    onStep: (i) => {
+      dog.stretchAlong();
+      if (i > 0 && soundOn && !dnd) bark(1, 0.12);
+    },
+  });
+}
+
+/** Respiración en caja: inhala 4, sostén 4, exhala 4, sostén 4; cuatro vueltas. */
+function startBreathing(): void {
+  const cycle: [string, number][] = [['Inhala por la nariz…', 4], ['Sostén el aire…', 4], ['Exhala despacio…', 4], ['Sostén…', 4]];
+  startGuided({
+    steps: [['Ponte cómodo. Vamos a respirar juntos.', 3], ...cycle, ...cycle, ...cycle, ...cycle],
+    icon: '🌬️',
+    done: STR.breatheDone,
+    onStep: (i) => {
+      if (i === 0) dog.restAlong();
+    },
+  });
 }
 
 function report(kind: PetReport): void {
@@ -170,7 +242,7 @@ const dog = new Dog(scale, fx, {
 /** Ladra (si el sonido está activado) y muestra el mensaje. */
 function remind(text: string, ms?: number): void {
   dog.remind(text, ms);
-  if (soundOn) bark(3);
+  if (soundOn && !dnd) bark(3);
 }
 
 function measure(): void {
@@ -255,6 +327,15 @@ function handle(e: PetEvent): void {
       break;
     case 'stretch':
       startRoutine();
+      break;
+    case 'breathe':
+      startBreathing();
+      break;
+    case 'dnd':
+      dnd = e.on;
+      break;
+    case 'timer':
+      timerPill.set(e.endsAt, e.icon, e.label);
       break;
     case 'ambient':
       setAmbient(e.kind);
@@ -445,13 +526,13 @@ function frame(now: number): void {
   ctx.translate(ORIGIN_X * scale, ORIGIN_Y * scale);
   if (photo && dogVideo) {
     dogVideo.update(dog.videoView(), dog.x, dog.y, scale);
+    drawVideoShadow(dogVideo);
     const lm = dogVideo.landmarks();
     if (lm) {
       // Globos y corazones sobre la cabeza real; la pelota y las migas, en la boca real.
       dog.headHint = { x: lm.head.x - dog.x, y: lm.head.y - dog.y + 14 * scale };
       dog.mouthHint = { x: lm.nose.x - dog.x - 6 * scale * dog.facing, y: lm.nose.y - dog.y + 7 * scale };
     }
-    dog.drawShadow(ctx);
   } else if (dog3d && dog.style3d && canvas3d) {
     canvas3d.style.transform = boxTransform;
     dog3d.render(dog.view3d());
@@ -460,6 +541,7 @@ function frame(now: number): void {
   }
   fx.draw(ctx);
 
+  timerPill.update(dog.x, world.floorY, dog.facing, scale);
   const head = dog.headOffset();
   bubble.update(now, dog.x + head.x, dog.y + head.y - 22 * scale, world.width);
 }
