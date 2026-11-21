@@ -25,6 +25,9 @@ await Promise.all([
     target: 'node22',
     format: 'cjs',
     external: ['electron'],
+    // Más chico arranca antes; los nombres se conservan para que los errores se entiendan.
+    minify: !dev,
+    keepNames: true,
   }),
   build({
     ...common,
@@ -46,11 +49,17 @@ await Promise.all([
   }),
   build({
     ...common,
-    entryPoints: ['src/renderer/main.ts'],
-    outfile: 'dist/renderer/renderer.js',
+    // Módulos con división en partes: el motor 3D (three.js) y las siluetas de los
+    // videos quedan en archivos propios, que se cargan solo cuando hacen falta y
+    // casi nunca cambian (así las actualizaciones bajan menos).
+    entryPoints: { renderer: 'src/renderer/main.ts' },
+    outdir: 'dist/renderer',
+    entryNames: '[name]',
+    chunkNames: 'parte-[hash]',
+    splitting: true,
     platform: 'browser',
     target: 'chrome130',
-    format: 'iife',
+    format: 'esm',
     minify: !dev,
   }),
   build({

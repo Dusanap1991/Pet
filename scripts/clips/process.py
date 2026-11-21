@@ -331,7 +331,8 @@ def process(name, spec, fps):
             '-row-mt', '1', '-auto-alt-ref', '0', '-an', out,
         ], check=True)
         # Primer cuadro como imagen, para mostrarlo al instante mientras carga el video.
-        shutil.copy(os.path.join(tmp, '0000.png'), os.path.join(OUT_DIR, f'{name}.png'))
+        # Imagen de espera (mientras carga el video): WebP pesa ~10 veces menos que PNG.
+        Image.open(os.path.join(tmp, '0000.png')).save(os.path.join(OUT_DIR, f'{name}.webp'), 'WEBP', quality=88, method=6)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -342,7 +343,7 @@ def process(name, spec, fps):
     print(f'  → assets/dog/{name}.webm  {x1 - x0}x{y1 - y0}, {len(rgbs)} cuadros, {size / 1024:.0f} KB')
     return {
         'file': f'{name}.webm',
-        'poster': f'{name}.png',
+        'poster': f'{name}.webp',
         'width': int(x1 - x0),
         'height': int(y1 - y0),
         'frames': len(rgbs),

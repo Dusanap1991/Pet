@@ -118,7 +118,7 @@ function render(v: DayView): void {
   // Días juntos y entrenamiento
   $('together').textContent = [
     v.together > 0 ? `🐾 Juntos hace ${v.together} día${v.together === 1 ? '' : 's'}` : '🐾 Hoy empezamos a ser amigos',
-    `🎓 Entrenamiento: ${v.training.label} (${v.training.points} órdenes)`,
+    `🎓 Entrenamiento: ${v.training.label} (${v.training.points} ${v.training.points === 1 ? "orden" : "órdenes"})`,
   ].join(' · ');
 
   // Cuentas regresivas

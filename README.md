@@ -137,6 +137,12 @@ Una vez instalada, la app se actualiza sola: al abrir (y cada 6 horas) consulta 
 desde el menú de la bandeja ("Reiniciar para actualizar"). No reinstala nada: solo
 cambia el código del perro, por eso funciona aunque la app no esté firmada.
 
+Baja solo lo que cambió: cada release publica la huella de cada archivo
+(`latest.json`) y los archivos sueltos (`<huella>.bin`); lo que ya está en el
+equipo, como los videos, se copia de la versión instalada. Un cambio de código
+pesa unos 200 KB en vez de 12 MB. Cada archivo se verifica con su huella; si algo
+falla, se baja el paquete completo (`update.json`).
+
 Solo hay que volver a instalar si cambia la base de la app (la versión de
 Electron o `src/main/boot.ts`); en ese caso se sube `SHELL_VERSION` en
 `src/main/updater.ts` y las apps antiguas ignoran las actualizaciones nuevas.
@@ -190,6 +196,11 @@ El estilo 3D (`src/renderer/dog3d/`) usa Three.js y las mismas poses: cada
 cuadro rehace el cuerpo, el cuello, las patas, el hocico y la cola como tubos con
 volumen a partir de los puntos clave, así que todas las animaciones sirven en
 los dos estilos.
+
+La ventana del perro se compila en módulos separados: el código principal
+(`renderer.js`, ~70 KB) arranca primero; Three.js solo se carga si eliges el
+estilo 3D, y las siluetas de los videos (`src/renderer/masks.ts`) llegan aparte
+porque pesan más de 1 MB y casi nunca cambian.
 
 La parte del perro es web pura y no conoce Electron: recibe eventos (`away`,
 `back`, `treat`, `break-due`...) y avisa cuándo quiere recibir clics. Eso permite

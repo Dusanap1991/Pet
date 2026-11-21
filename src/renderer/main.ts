@@ -673,7 +673,8 @@ function frame(now: number): void {
   // Con el perro quieto no hace falta dibujar a 60 cuadros por segundo.
   // (Las "z" del sueño flotan despacio: no justifican subir el ritmo.)
   const busy = treats.active || laserUntil > now || pressing || holdingBall || (ball?.moving ?? false) || (fx.active && !dog.sleeping);
-  const minStep = busy ? 0 : dog.sleeping ? 1 / 15 : dog.calm ? 1 / 30 : 0;
+  // En movimiento, 60 como máximo: en pantallas de 120 Hz el doble no se nota y gasta el doble.
+  const minStep = busy ? 1 / 60 : dog.sleeping ? 1 / 15 : dog.calm ? 1 / 30 : 1 / 60;
   if (elapsed < minStep - 0.004) return;
   last = now;
   const dt = Math.min(elapsed, 0.1);

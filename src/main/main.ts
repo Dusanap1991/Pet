@@ -400,7 +400,9 @@ async function lookForUpdate(manual: boolean): Promise<void> {
   if (!app.isPackaged || checkingUpdate) return;
   checkingUpdate = true;
   try {
-    const build = await checkForUpdate(updateRoot(), updateReady ?? __PET_BUILD__, (url) => net.fetch(url, { cache: 'no-store' }));
+    // Lo que ya está en el equipo (el código que corre ahora y el instalado) no se vuelve a bajar.
+    const localDirs = [...new Set([path.join(__dirname, '..'), path.join(app.getAppPath(), 'dist')])];
+    const build = await checkForUpdate(updateRoot(), updateReady ?? __PET_BUILD__, (url) => net.fetch(url, { cache: 'no-store' }), localDirs);
     if (build !== null) {
       updateReady = build;
       send({ type: 'notice', text: '¡Hay una versión nueva! Reinicia desde mi menú para estrenarla.' });

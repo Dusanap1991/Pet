@@ -1,4 +1,5 @@
-// Arma el paquete de actualización (update.json) y su anuncio (latest.json) a partir de dist/.
+// Arma el paquete de actualización (update.json), cada archivo suelto (<huella>.bin)
+// y el anuncio (latest.json con la huella de cada archivo) a partir de dist/.
 // Uso: PET_BUILD=12 node scripts/make-update.mjs [carpeta de salida]
 import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -10,6 +11,10 @@ const SHELL_VERSION = Number(/SHELL_VERSION = (\d+)/.exec(readFileSync('src/main
 const out = process.argv[2] || 'release-update';
 
 const files = {};
+const blobs = new Map();
+/** Ruta → huella, para que la app baje solo los archivos que cambiaron. */
+const hashes = {};
+const sha = (buf) => createHash('sha256').update(buf).digest('hex');
 const walk = (dir) => {
   for (const name of readdirSync(dir)) {
     const file = join(dir, name);
@@ -17,7 +22,12 @@ const walk = (dir) => {
     else {
       const rel = relative('dist', file).split(sep).join('/');
       // boot.js es el arranque fijo de la app instalada; no viaja en la actualización.
-      if (rel !== 'main/boot.js' && !rel.endsWith('.map')) files[rel] = readFileSync(file).toString('base64');
+      if (rel === 'main/boot.js' || rel.endsWith('.map')) continue;
+      const data = readFileSync(file);
+      files[rel] = data.toString('base64');
+      hashes[rel] = sha(data);
+      // Cada archivo también se publica suelto, con su huella como nombre.
+      blobs.set(hashes[rel], data);
     }
   }
 };
@@ -31,8 +41,10 @@ writeFileSync(
   JSON.stringify({
     build,
     shell: SHELL_VERSION,
-    sha256: createHash('sha256').update(bundle).digest('hex'),
+    sha256: sha(bundle),
     url: `https://github.com/Dusanap1991/Pet/releases/download/build-${build}/update.json`,
+    files: hashes,
   }),
 );
-console.log(`Actualización ${build}: ${Object.keys(files).length} archivos, ${bundle.length} bytes`);
+for (const [hash, data] of blobs) writeFileSync(join(out, `${hash}.bin`), data);
+console.log(`Actualización ${build}: ${Object.keys(files).length} archivos (${blobs.size} sueltos), paquete completo ${bundle.length} bytes`);

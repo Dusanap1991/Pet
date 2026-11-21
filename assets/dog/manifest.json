@@ -2,7 +2,7 @@
   "clips": {
     "quieto": {
       "file": "quieto.webm",
-      "poster": "quieto.png",
+      "poster": "quieto.webp",
       "width": 756,
       "height": 424,
       "frames": 228,
@@ -14,7 +14,7 @@
     },
     "caminar": {
       "file": "caminar.webm",
-      "poster": "caminar.png",
+      "poster": "caminar.webp",
       "width": 736,
       "height": 406,
       "frames": 183,
@@ -26,7 +26,7 @@
     },
     "correr": {
       "file": "correr.webm",
-      "poster": "correr.png",
+      "poster": "correr.webp",
       "width": 736,
       "height": 400,
       "frames": 77,
@@ -38,7 +38,7 @@
     },
     "sentarse": {
       "file": "sentarse.webm",
-      "poster": "sentarse.png",
+      "poster": "sentarse.webp",
       "width": 722,
       "height": 390,
       "frames": 88,
@@ -50,7 +50,7 @@
     },
     "sentado": {
       "file": "sentado.webm",
-      "poster": "sentado.png",
+      "poster": "sentado.webp",
       "width": 702,
       "height": 426,
       "frames": 145,
@@ -62,7 +62,7 @@
     },
     "levantarse": {
       "file": "levantarse.webm",
-      "poster": "levantarse.png",
+      "poster": "levantarse.webp",
       "width": 722,
       "height": 390,
       "frames": 88,
@@ -74,7 +74,7 @@
     },
     "echado": {
       "file": "echado.webm",
-      "poster": "echado.png",
+      "poster": "echado.webp",
       "width": 746,
       "height": 410,
       "frames": 207,
@@ -86,7 +86,7 @@
     },
     "dormir": {
       "file": "dormir.webm",
-      "poster": "dormir.png",
+      "poster": "dormir.webp",
       "width": 704,
       "height": 344,
       "frames": 96,
@@ -98,7 +98,7 @@
     },
     "olfatear": {
       "file": "olfatear.webm",
-      "poster": "olfatear.png",
+      "poster": "olfatear.webp",
       "width": 844,
       "height": 340,
       "frames": 81,
@@ -110,7 +110,7 @@
     },
     "comer": {
       "file": "comer.webm",
-      "poster": "comer.png",
+      "poster": "comer.webp",
       "width": 764,
       "height": 410,
       "frames": 135,
@@ -122,7 +122,7 @@
     },
     "feliz": {
       "file": "feliz.webm",
-      "poster": "feliz.png",
+      "poster": "feliz.webp",
       "width": 740,
       "height": 412,
       "frames": 80,
@@ -134,7 +134,7 @@
     },
     "ladrar": {
       "file": "ladrar.webm",
-      "poster": "ladrar.png",
+      "poster": "ladrar.webp",
       "width": 768,
       "height": 394,
       "frames": 62,
