@@ -4,6 +4,7 @@ export type PetSize = 's' | 'm' | 'l';
 export type Coat = 'red' | 'blacktan' | 'chocolate' | 'cream' | 'dapple';
 export type Outfit = 'santa' | 'witch' | 'scarf' | null;
 export type DogStyle = '2d' | '3d' | 'photo';
+export type DogCommand = 'sit' | 'lie' | 'spin' | 'bark' | 'stay';
 export type Ambient = 'off' | 'rain' | 'waves' | 'brown';
 
 /** Mensajes que el proceso principal le manda al perro. */
@@ -16,12 +17,14 @@ export type PetEvent =
   | { type: 'focus-end'; completed: boolean; minutes: number }
   | { type: 'treat'; kind?: 'cookie' | 'bone' | 'sausage'; x?: number }
   | { type: 'meal' }
+  | { type: 'command'; cmd: DogCommand; chance: number }
+  | { type: 'treatRain'; seconds: number }
   | { type: 'hide' }
   | { type: 'laser'; seconds: number }
   | { type: 'water' }
   | { type: 'reminder'; text: string }
   | { type: 'notice'; text: string }
-  | { type: 'settings'; size: PetSize; sound: boolean; name: string; coat: Coat; outfit: Outfit; style: DogStyle }
+  | { type: 'settings'; size: PetSize; sound: boolean; name: string; coat: Coat; outfit: Outfit; style: DogStyle; speak: boolean }
   | { type: 'eyes' }
   | { type: 'stretch' }
   | { type: 'ambient'; kind: Ambient }
@@ -33,7 +36,7 @@ export type PetEvent =
   | { type: 'ball'; out: boolean };
 
 /** Lo que el perro le cuenta al proceso principal (para el resumen del día y el ánimo). */
-export type PetReport = 'pet' | 'treat' | 'play' | 'drank' | 'stretched' | 'treat-cookie' | 'treat-bone' | 'treat-sausage' | 'meal' | 'tired';
+export type PetReport = 'pet' | 'treat' | 'play' | 'drank' | 'stretched' | 'treat-cookie' | 'treat-bone' | 'treat-sausage' | 'meal' | 'tired' | 'obeyed';
 
 /** API que el preload expone en `window.pet`. */
 export interface PetBridge {

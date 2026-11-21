@@ -4,7 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 const INVOKE = new Set([
   'day:get', 'task:add', 'task:toggle', 'task:remove',
   'settings:get', 'settings:set', 'calendar:test', 'folder:choose', 'weather:test', 'quick:add',
-  'habit:add', 'habit:toggle', 'habit:remove', 'mood:set', 'notes:get', 'notes:set',
+  'habit:add', 'habit:toggle', 'habit:remove', 'mood:set', 'notes:get', 'notes:set', 'countdown:add', 'countdown:remove',
 ]);
 const EVENTS = new Set(['day:changed', 'settings:changed']);
 

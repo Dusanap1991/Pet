@@ -225,3 +225,8 @@ body.demo.dark {
 .laser.on {
   opacity: 1;
 }
+
+.treat.leave-fast {
+  transition: opacity 0.3s ease;
+  opacity: 0;
+}

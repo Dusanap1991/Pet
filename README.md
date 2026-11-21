@@ -68,7 +68,7 @@ Para Windows y macOS.
 - **Notas**: un bloc de notas que se guarda solo.
 - **Frase del día** en el saludo de la mañana y **tiempo de foco visible** junto al
   perro durante una sesión de foco o un Pomodoro.
-- **Logros**: 22 medallas en "Mi día" (rachas, vasos de agua, focos, tareas…).
+- **Logros**: 24 medallas en "Mi día" (rachas, vasos de agua, focos, tareas…).
 - **Juega y hace gracias**: si mueves el mouse rápido cerca del suelo, hace una
   reverencia y lo persigue; además bosteza, se estira, se sacude y persigue su cola.
   De noche está más dormilón.
@@ -85,6 +85,19 @@ Para Windows y macOS.
   hemisferio).
 - **Sesiones de foco**: elige 15, 25 o 45 minutos; se queda echado y tranquilo, y
   ladra cuando se cumple el tiempo.
+- **Órdenes y entrenamiento**: en el menú "Órdenes" le pides que se siente, se eche,
+  se quede quieto, gire o ladre. Al principio no siempre obedece; cada orden cumplida
+  suma y, si le das un premio justo después, aprende más rápido (de Cachorro a Experto).
+- **Lluvia de premios**: durante 20 segundos caen galletas; atrápalas con el perro y
+  bate tu récord.
+- **Calculadora en la nota rápida**: escribe "12*8", "15% de 2300" o "cuánto es 3^4"
+  y te responde el resultado.
+- **Cuentas regresivas**: en "Mi día" agregas fechas (vacaciones, cumpleaños…); te
+  avisa el día antes y el mismo día. También cuenta cuántos días llevan juntos y
+  celebra los aniversarios.
+- **Leer en voz alta** (opcional): los avisos y recordatorios se leen con la voz
+  del sistema.
+- **Postura** (opcional): cada 40 minutos te recuerda enderezar la espalda.
 
 Todo se controla con clic derecho sobre el perro, o desde su ícono en la bandeja
 del sistema (Windows) o en la barra de menú (macOS): mostrar u ocultar, premios, foco, avisos, tamaño y

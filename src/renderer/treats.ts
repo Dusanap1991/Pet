@@ -101,6 +101,9 @@ abstract class Item implements TreatTarget {
 class Treat extends Item {
   readonly w: number;
   readonly h: number;
+  /** De la lluvia de premios: se come al tiro y si nadie lo agarra, desaparece. */
+  rain = false;
+  landedAt = 0;
 
   constructor(x: number, readonly kind: TreatKind, scale: number, parent: HTMLElement) {
     super(x, parent, 'treat', SVG[kind].svg);
@@ -162,8 +165,17 @@ export class Treats {
   }
 
   /** Un premio que cae (desde arriba, donde está `x`). */
-  spawn(x: number, scale: number, kind: TreatKind = 'bone'): void {
-    this.list.push(new Treat(x, kind, scale, this.parent));
+  spawn(x: number, scale: number, kind: TreatKind = 'bone', rain = false): void {
+    const t = new Treat(x, kind, scale, this.parent);
+    if (rain) {
+      t.rain = true;
+      t.eatTime = 0.55;
+    }
+    this.list.push(t);
+  }
+
+  isRain(target: TreatTarget): boolean {
+    return target instanceof Treat && target.rain;
   }
 
   /** Sirve el plato en `x` (si ya hay uno, lo rellena). */
@@ -199,6 +211,17 @@ export class Treats {
   update(dt: number, floorY: number): void {
     const now = performance.now();
     for (const t of [...this.list]) {
+      // Premios de la lluvia que nadie agarró: se esfuman a los 4 segundos.
+      if (t instanceof Treat && t.rain && t.landed) {
+        t.landedAt ||= now;
+        if (now - t.landedAt > 4000) {
+          t.el.classList.add('leave-fast');
+          setTimeout(() => this.remove(t), 300);
+          t.rain = false;
+          t.hidden = true;
+          continue;
+        }
+      }
       if (t instanceof Bowl && t.shouldRemove(now)) {
         t.el.classList.add('leave');
         setTimeout(() => this.remove(t), 600);

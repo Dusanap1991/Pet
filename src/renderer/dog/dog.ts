@@ -651,8 +651,12 @@ export class Dog {
           this.goalTreat = null;
         }
         if (this.stateT >= this.stateDur) {
-          this.enter('happy', 1.6);
-          this.spawnHeart();
+          // Comida al paso (lluvia de premios): sigue de inmediato con el siguiente.
+          if (this.stateDur < 1) this.enter('idle', 0.1);
+          else {
+            this.enter('happy', 1.6);
+            this.spawnHeart();
+          }
         }
         break;
       }
@@ -897,6 +901,7 @@ export class Dog {
 
   /** Si hay un premio en el suelo, se pone alerta y va por él. */
   private noticeTreat(): boolean {
+    if (this.stayT > 0) return false;
     const treat = this.hooks.nearestTreat(this.x);
     if (!treat) return false;
     this.goalTreat = treat;
@@ -918,6 +923,7 @@ export class Dog {
     this.lastCY = w.cursorY;
     this.chaseCooldown = Math.max(0, this.chaseCooldown - dt);
     this.tiredT = Math.max(0, this.tiredT - dt);
+    this.stayT = Math.max(0, this.stayT - dt);
   }
 
   /** El cursor anda cerca del suelo, a su alcance. */
@@ -937,6 +943,7 @@ export class Dog {
 
   /** Hay un premio escondido: sale a buscarlo con la nariz en el suelo. */
   private noticeHidden(): boolean {
+    if (this.stayT > 0) return false;
     const hidden = this.hooks.hiddenTreat();
     if (!hidden || this.awayMode) return false;
     const [lo, hi] = this.bounds();
@@ -951,10 +958,42 @@ export class Dog {
 
   /** El puntero láser encendido: lo persigue. */
   private noticeLaser(): boolean {
+    if (this.stayT > 0) return false;
     if (!this.hooks.laser() || this.tiredT > 0 || this.awayMode) return false;
     this.laserWas = true;
     this.playT = 0;
     this.enter('bow', 0.5);
+    return true;
+  }
+
+  /** "Quieto": se queda sentado sin ir por premios ni pelotas hasta que pase este tiempo (s). */
+  private stayT = 0;
+
+  /**
+   * Una orden. Obedece con probabilidad `chance` (sube con el entrenamiento).
+   * Devuelve si obedeció.
+   */
+  command(cmd: 'sit' | 'lie' | 'spin' | 'bark' | 'stay', chance: number): boolean {
+    if (['drag', 'fall', 'land', 'eat', 'pickup'].includes(this.state)) return false;
+    const w = this.world;
+    if (w.cursorKnown) this.facing = w.cursorX >= this.x ? 1 : -1;
+    this.goalTreat = null;
+    this.comeX = null;
+    if (Math.random() > chance) {
+      // No entendió: te mira con la cabeza ladeada.
+      this.enter('alert', 1.2);
+      return false;
+    }
+    switch (cmd) {
+      case 'sit': this.enter('sit', 10); break;
+      case 'lie': this.enter('lie', 14); break;
+      case 'spin': this.enter('spin', 1.8); break;
+      case 'bark': this.enter('bark', 1.4); break;
+      case 'stay':
+        this.stayT = 12;
+        this.enter('sit', 12);
+        break;
+    }
     return true;
   }
 
@@ -967,6 +1006,7 @@ export class Dog {
 
   /** Si lanzaste la pelota, va a buscarla. */
   private noticeBall(): boolean {
+    if (this.stayT > 0) return false;
     const ball = this.hooks.ball();
     if (!ball || ball.holder !== 'none' || ball.throwId === this.fetchedThrow || this.awayMode || this.focusMode || this.tiredT > 0) return false;
     this.fetchedThrow = ball.throwId;

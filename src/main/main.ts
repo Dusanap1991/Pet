@@ -19,7 +19,7 @@ import {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { Ambient, PetEvent, PetReport, PetSize } from '../shared/types';
+import type { Ambient, DogCommand, PetEvent, PetReport, PetSize } from '../shared/types';
 import { ActivityTracker } from './activity';
 import { FocusSession } from './focus';
 import { Achievements, type Achievement, type Counter } from './achievements';
@@ -31,6 +31,9 @@ import { isFullscreen, watchWindows, type WindowRect } from './fullscreen';
 import { Mood, foodLabel, joyLabel } from './mood';
 import { Pomodoro, POMODORO } from './pomodoro';
 import { quoteOfDay } from './quotes';
+import { formatNumber } from './calc';
+import { CountdownStore, daysUntil, together } from './countdowns';
+import { obeyChance, trainingLevel } from './training';
 import { parseQuick } from './quick';
 import { ReminderStore, parseRequest, repeatLabel } from './reminders';
 import { DailyTrigger, FRIDAY, WEEKDAYS, parseHHMM } from './schedule';
@@ -133,6 +136,12 @@ let lastNoticeAt = 0;
 let noticeTimer: NodeJS.Timeout | undefined;
 const NOTICE_GAP_MS = 7000;
 const NOTES_MAX = 100_000;
+let countdowns: CountdownStore;
+let posture: WaterReminder;
+const dailyEvents = new DailyTrigger(600);
+/** Cuándo obedeció la última orden: un premio poco después le enseña el doble. */
+let lastObeyAt = 0;
+const COMMANDS: [DogCommand, string][] = [['sit', '🪑 Siéntate'], ['lie', '🛏️ Échate'], ['stay', '✋ Quieto'], ['spin', '🔄 Gira'], ['bark', '🗣️ Habla (ladra)']];
 
 const SHORTCUTS = { note: 'Control+Alt+N', focus: 'Control+Alt+F', pet: 'Control+Alt+P', come: 'Control+Alt+V' } as const;
 const AMBIENTS: [Ambient, string][] = [['off', 'Apagado'], ['rain', 'Lluvia'], ['waves', 'Olas'], ['brown', 'Ruido marrón']];
@@ -492,6 +501,9 @@ function dayView(): unknown {
       : null,
     taskNudges: settings.taskNudges,
     achievements: achievements.list(),
+    countdowns: countdowns.list(now).map((c) => ({ id: c.id, name: c.name, date: c.date, days: daysUntil(c.date, now) })),
+    together: settings.firstDay ? together(settings.firstDay, now).days : 0,
+    training: { points: settings.trainingPoints, ...trainingLevel(settings.trainingPoints) },
     waterGoal: settings.waterGoal,
     moodScore: stats.today(now).moodScore,
     weekMood: stats.history(now, 7).map((d) => d.stats.moodScore),
@@ -562,6 +574,20 @@ function registerPanelHandlers(): void {
     return true;
   });
   const notesFile = (): string => path.join(app.getPath('userData'), 'notes.txt');
+  handle('countdown:add', ['day'], (raw) => {
+    const r = raw as { name?: unknown; date?: unknown } | null;
+    if (!r || typeof r.name !== 'string' || typeof r.date !== 'string') return null;
+    const c = countdowns.add(r.name, r.date, Date.now());
+    if (c) {
+      const d = daysUntil(c.date, Date.now());
+      send({ type: 'notice', text: d === 0 ? `¡${c.name} es hoy! 🎉` : `Anotado: faltan ${d} día${d === 1 ? '' : 's'} para ${c.name}.` });
+    }
+    return c;
+  });
+  handle('countdown:remove', ['day'], (id) => {
+    if (typeof id === 'string') countdowns.remove(id);
+    return true;
+  });
   handle('notes:get', ['notes'], () => {
     try {
       return fs.readFileSync(notesFile(), 'utf8');
@@ -610,12 +636,14 @@ function registerPanelHandlers(): void {
     waterGoals: WATER_GOALS,
     dailyQuote: settings.dailyQuote,
     showTimer: settings.showTimer,
+    speak: settings.speak,
+    postureReminders: settings.postureReminders,
   }));
   handle('settings:set', ['settings'], (patch) => {
     if (typeof patch !== 'object' || patch === null) return false;
     const allowed = [
       'name', 'sound', 'calendarUrl', 'meetingLeadMin', 'dropFolder', 'deviceAlerts', 'taskNudges', 'quietInMeetings',
-      'shortcuts', 'endOfDay', 'endOfDayTime', 'weeklySummary', 'lateNight', 'eyeBreaks', 'weatherCity', 'costumes', 'coat', 'style', 'waterGoal', 'dailyQuote', 'showTimer',
+      'shortcuts', 'endOfDay', 'endOfDayTime', 'weeklySummary', 'lateNight', 'eyeBreaks', 'weatherCity', 'costumes', 'coat', 'style', 'waterGoal', 'dailyQuote', 'showTimer', 'speak', 'postureReminders',
     ];
     const picked = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     const next = sanitizeSettings({ ...settings, ...picked });
@@ -663,6 +691,10 @@ function registerPanelHandlers(): void {
     const note = parseQuick(typeof raw === 'string' ? raw : '', Date.now());
     panels.quick?.close();
     if (!note) return false;
+    if (note.kind === 'calc') {
+      send({ type: 'notice', text: `🧮 ${note.text} = ${formatNumber(note.result)}` });
+      return true;
+    }
     if (note.kind === 'task') {
       if (tasks.add(note.text, Date.now())) {
         nudger.markGreeted(Date.now());
@@ -797,6 +829,12 @@ function onReport(kind_: PetReport): void {
       const kind = kind_ === 'treat' ? 'bone' : (kind_.slice(6) as 'cookie' | 'bone' | 'sausage');
       mood.apply(kind);
       bump('treats');
+      // Premio justo después de obedecer: aprende el doble.
+      if (now - lastObeyAt < 20_000) {
+        lastObeyAt = 0;
+        updateSettings({ trainingPoints: settings.trainingPoints + 1 });
+        queueNotice('¡Gracias! Con premio aprendo más rápido 🎓');
+      }
       break;
     }
     case 'meal':
@@ -806,6 +844,11 @@ function onReport(kind_: PetReport): void {
       break;
     case 'tired':
       mood.apply('play');
+      break;
+    case 'obeyed':
+      lastObeyAt = now;
+      updateSettings({ trainingPoints: settings.trainingPoints + 1 });
+      bump('obeyed');
       break;
     case 'play':
       if (now - lastPlayReport < 15_000) return;
@@ -881,7 +924,7 @@ function trayImage(): Electron.NativeImage {
 function updateSettings(patch: Partial<Settings>): void {
   settings = { ...settings, ...patch };
   saveSettings(settingsFile, settings);
-  if (['size', 'sound', 'name', 'coat', 'costumes', 'weatherPlace', 'style'].some((k) => k in patch)) sendSettings();
+  if (['size', 'sound', 'name', 'coat', 'costumes', 'weatherPlace', 'style', 'speak'].some((k) => k in patch)) sendSettings();
   for (const w of Object.values(panels)) if (w && !w.isDestroyed()) w.webContents.send('settings:changed');
   refreshTray();
 }
@@ -889,7 +932,7 @@ function updateSettings(patch: Partial<Settings>): void {
 function sendSettings(): void {
   const south = isSouthern(Intl.DateTimeFormat().resolvedOptions().timeZone, settings.weatherPlace?.lat);
   const outfit = settings.costumes ? outfitFor(new Date(), south) : null;
-  send({ type: 'settings', size: settings.size, sound: settings.sound, name: settings.name, coat: settings.coat, outfit, style: settings.style });
+  send({ type: 'settings', size: settings.size, sound: settings.sound, name: settings.name, coat: settings.coat, outfit, style: settings.style, speak: settings.speak });
 }
 
 function sendMood(force = false): void {
@@ -1118,6 +1161,14 @@ function buildMenu(): Menu {
       ],
     },
     {
+      label: `Órdenes (${trainingLevel(settings.trainingPoints).label.toLowerCase()})`,
+      enabled: shown,
+      submenu: COMMANDS.map(([cmd, label]) => ({
+        label,
+        click: () => send({ type: 'command', cmd, chance: obeyChance(settings.trainingPoints) }),
+      })),
+    },
+    {
       label: 'Jugar',
       enabled: shown,
       submenu: [
@@ -1125,6 +1176,7 @@ function buildMenu(): Menu {
           ? { label: 'Guardar la pelota', click: () => setBall(false) }
           : { label: '🎾 Pelota', click: () => setBall(true) },
         { label: '🔴 Puntero láser (30 s)', click: () => send({ type: 'laser', seconds: 30 }) },
+        { label: '🌧️ Lluvia de premios (20 s)', click: () => send({ type: 'treatRain', seconds: 20 }) },
       ],
     },
     { label: tasks.pending.length ? `Mi día (${tasks.pending.length} pendientes)…` : 'Mi día…', click: () => openPanel('day') },
@@ -1353,6 +1405,8 @@ function tickActivity(): void {
 
   const tired = eyes.tick({ now, enabled: settings.eyeBreaks && shown, everyMin: 20, away: tracker.isAway, quiet: inMeeting(now) || inDnd(now) || thirsty });
   if (tired) send({ type: 'eyes' });
+  const slouch = posture.tick({ now, enabled: settings.postureReminders && shown, everyMin: 40, away: tracker.isAway, quiet: inMeeting(now) || inDnd(now) || thirsty || tired });
+  if (slouch) queueNotice('🪑 ¿Cómo va tu postura? Espalda apoyada, hombros sueltos y pantalla a la altura de los ojos.');
 
   syncAmbient();
   syncTimer();
@@ -1521,6 +1575,15 @@ function tickDaily(now: number, away: boolean, meetingNow: boolean, shown: boole
     gentle('🌙 Ya es tarde. ¿Y si lo dejamos para mañana? Yo ya tengo sueño.');
   }
 
+  if (dailyEvents.tick({ now, h: 7, m: 0, enabled: true, ready })) {
+    for (const t of countdowns.todayNotices(now)) gentle(t);
+    const { milestone } = settings.firstDay ? together(settings.firstDay, now) : { milestone: null };
+    if (milestone) {
+      gentle(milestone);
+      send({ type: 'treat', kind: 'sausage' });
+    }
+  }
+
   if (morningQuote.tick({ now, h: 6, m: 0, enabled: settings.dailyQuote, ready: ready && today.activeSec >= 60 })) {
     gentle(`💬 Frase del día: ${quoteOfDay(now)}`);
   }
@@ -1618,6 +1681,9 @@ function start(): void {
   mood = new Mood(path.join(app.getPath('userData'), 'mood.json'));
   achievements = new Achievements(path.join(app.getPath('userData'), 'achievements.json'));
   habits = new HabitStore(path.join(app.getPath('userData'), 'habits.json'));
+  countdowns = new CountdownStore(path.join(app.getPath('userData'), 'countdowns.json'));
+  posture = new WaterReminder(Date.now(), 40);
+  if (!settings.firstDay) updateSettings({ firstDay: dayKey(Date.now()) });
   eyes = new WaterReminder(Date.now(), 20);
   registerPanelHandlers();
 
@@ -1651,7 +1717,7 @@ function start(): void {
 
   ipcMain.on('pet:report', (event, kind: unknown) => {
     if (!isFromPet(event)) return;
-    const ok: PetReport[] = ['pet', 'treat', 'play', 'drank', 'stretched', 'treat-cookie', 'treat-bone', 'treat-sausage', 'meal', 'tired'];
+    const ok: PetReport[] = ['pet', 'treat', 'play', 'drank', 'stretched', 'treat-cookie', 'treat-bone', 'treat-sausage', 'meal', 'tired', 'obeyed'];
     if (ok.includes(kind as PetReport)) onReport(kind as PetReport);
   });
 

@@ -265,3 +265,37 @@
   height: 100%;
   background: #3d8fd6;
 }
+
+.countdowns {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.countdowns li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 2px;
+  border-top: 1px solid var(--line);
+}
+
+.countdowns li:first-child {
+  border-top: 0;
+}
+
+.countdowns .days {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+input[type="date"] {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--fg);
+  font: inherit;
+}

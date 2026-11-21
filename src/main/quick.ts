@@ -6,9 +6,13 @@
  *   "en 1 hora sacar la ropa"   → recordatorio en 60 minutos
  *   "a las 16:30 remedio"       → recordatorio a esa hora (hoy, o mañana si ya pasó)
  */
+import { calc, looksLikeMath } from './calc';
 import { nextOccurrence } from './reminders';
 
-export type QuickNote = { kind: 'task'; text: string } | { kind: 'reminder'; text: string; at: number };
+export type QuickNote =
+  | { kind: 'task'; text: string }
+  | { kind: 'reminder'; text: string; at: number }
+  | { kind: 'calc'; text: string; result: number };
 
 const IN = /^en\s+(\d{1,4})\s*(m|min|mins|minuto|minutos|h|hr|hrs|hora|horas)\b[\s,:.-]*(.+)$/i;
 const AT = /^a\s+las?\s+(\d{1,2})(?:[:.](\d{2}))?\s*(?:h|hrs)?\b[\s,:.-]*(.+)$/i;
@@ -16,6 +20,11 @@ const AT = /^a\s+las?\s+(\d{1,2})(?:[:.](\d{2}))?\s*(?:h|hrs)?\b[\s,:.-]*(.+)$/i
 export function parseQuick(raw: string, now: number): QuickNote | null {
   const text = raw.replace(/\s+/g, ' ').trim().slice(0, 140);
   if (!text) return null;
+
+  if (looksLikeMath(text)) {
+    const result = calc(text);
+    if (result !== null) return { kind: 'calc', text: text.replace(/^=\s*/, ''), result };
+  }
 
   const inMatch = IN.exec(text);
   if (inMatch) {

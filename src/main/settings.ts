@@ -44,6 +44,13 @@ export interface Settings {
   dailyQuote: boolean;
   /** Mostrar junto al perro cuánto queda del foco o del Pomodoro. */
   showTimer: boolean;
+  /** Leer los avisos en voz alta. */
+  speak: boolean;
+  postureReminders: boolean;
+  /** Primer día juntos ("AAAA-MM-DD"), para el aniversario. */
+  firstDay: string;
+  /** Puntos de entrenamiento (órdenes cumplidas). */
+  trainingPoints: number;
   /** Pantalla donde vive el perro; sin valor, la principal. */
   displayId?: number;
 }
@@ -79,6 +86,10 @@ export const DEFAULT_SETTINGS: Settings = {
   ambientFocusOnly: true,
   dailyQuote: true,
   showTimer: true,
+  speak: false,
+  postureReminders: false,
+  firstDay: '',
+  trainingPoints: 0,
 };
 
 export const WATER_GOALS = [6, 8, 10, 12] as const;
@@ -136,6 +147,10 @@ export function sanitizeSettings(raw: unknown): Settings {
   if (typeof r.ambientFocusOnly === 'boolean') out.ambientFocusOnly = r.ambientFocusOnly;
   if (typeof r.dailyQuote === 'boolean') out.dailyQuote = r.dailyQuote;
   if (typeof r.showTimer === 'boolean') out.showTimer = r.showTimer;
+  if (typeof r.speak === 'boolean') out.speak = r.speak;
+  if (typeof r.postureReminders === 'boolean') out.postureReminders = r.postureReminders;
+  if (typeof r.firstDay === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.firstDay)) out.firstDay = r.firstDay;
+  if (typeof r.trainingPoints === 'number' && r.trainingPoints >= 0) out.trainingPoints = Math.min(1000, Math.round(r.trainingPoints));
   if (typeof r.displayId === 'number' && Number.isFinite(r.displayId)) out.displayId = r.displayId;
   return out;
 }

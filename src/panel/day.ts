@@ -16,6 +16,9 @@ interface DayView {
   meetings: { title: string; start: number }[] | null;
   taskNudges: boolean;
   waterGoal: number;
+  countdowns: { id: string; name: string; date: string; days: number }[];
+  together: number;
+  training: { points: number; level: number; label: string };
   moodScore: number;
   weekMood: number[];
   habits: { id: string; name: string; today: boolean; streak: number; week: boolean[] }[];
@@ -112,6 +115,26 @@ function render(v: DayView): void {
   };
   $('mood').replaceChildren(meter('Ánimo', v.mood.joy, v.mood.joyLabel), meter('Comida', v.mood.food, v.mood.foodLabel));
 
+  // Días juntos y entrenamiento
+  $('together').textContent = [
+    v.together > 0 ? `🐾 Juntos hace ${v.together} día${v.together === 1 ? '' : 's'}` : '🐾 Hoy empezamos a ser amigos',
+    `🎓 Entrenamiento: ${v.training.label} (${v.training.points} órdenes)`,
+  ].join(' · ');
+
+  // Cuentas regresivas
+  $('countdowns').replaceChildren(
+    ...(v.countdowns.length === 0
+      ? [el('li', { className: 'muted', textContent: 'Agrega una fecha que esperas (vacaciones, un cumpleaños, una entrega).' })]
+      : v.countdowns.map((c) => {
+          const when = c.days === 0 ? '¡Hoy!' : c.days === 1 ? 'Mañana' : c.days < 0 ? 'Ayer' : `${c.days} días`;
+          const date = new Date(`${c.date}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+          const del = el('button', { type: 'button', className: 'icon', textContent: '×', title: 'Borrar' });
+          del.setAttribute('aria-label', `Borrar "${c.name}"`);
+          del.addEventListener('click', () => void panel().invoke('countdown:remove', c.id).then(load));
+          return el('li', {}, el('span', { textContent: `${c.name} · ${date}` }), el('span', { className: 'days', textContent: when }), del);
+        })),
+  );
+
   // Hábitos
   $('habits').replaceChildren(
     ...(v.habits.length === 0
@@ -179,6 +202,18 @@ $<HTMLFormElement>('add').addEventListener('submit', (e) => {
   if (!text) return;
   input.value = '';
   void panel().invoke('task:add', text).then(load);
+});
+
+$<HTMLInputElement>('cd-date').value = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+$<HTMLFormElement>('add-cd').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = $<HTMLInputElement>('cd-name');
+  const date = $<HTMLInputElement>('cd-date');
+  if (!name.value.trim() || !date.value) return;
+  void panel().invoke('countdown:add', { name: name.value, date: date.value }).then(() => {
+    name.value = '';
+    return load();
+  });
 });
 
 $<HTMLFormElement>('add-habit').addEventListener('submit', (e) => {

@@ -26,6 +26,8 @@ interface PanelSettings {
   waterGoals: number[];
   dailyQuote: boolean;
   showTimer: boolean;
+  speak: boolean;
+  postureReminders: boolean;
 }
 
 const set = (patch: Partial<PanelSettings>): Promise<unknown> => panel().invoke('settings:set', patch);
@@ -36,7 +38,7 @@ const lead = $<HTMLSelectElement>('meetingLeadMin');
 const status = $<HTMLParagraphElement>('calendar-status');
 const checks = [
   'sound', 'deviceAlerts', 'taskNudges', 'quietInMeetings', 'shortcuts', 'endOfDay', 'weeklySummary', 'lateNight', 'eyeBreaks', 'costumes',
-  'dailyQuote', 'showTimer',
+  'dailyQuote', 'showTimer', 'speak', 'postureReminders',
 ] as const;
 const coat = $<HTMLSelectElement>('coat');
 const style = $<HTMLSelectElement>('style');

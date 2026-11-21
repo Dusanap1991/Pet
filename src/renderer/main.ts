@@ -127,6 +127,8 @@ const bubble = new Bubble(stage);
 let scale = SIZE_SCALE.m;
 let dpr = 1;
 let soundOn = false;
+/** Leer los avisos en voz alta. */
+let speakOn = false;
 /** "No molestar": sin ladridos. */
 let dnd = false;
 let ball: Ball | null = null;
@@ -231,8 +233,10 @@ const dog = new Dog(scale, fx, {
   nearestTreat: (x) => treats.nearest(x),
   eatTreat: (t) => {
     const kind = treats.kindOf(t);
+    const fromRain = treats.isRain(t);
     treats.remove(t);
-    onAte(kind);
+    if (fromRain && rain) rain.score++;
+    else if (!fromRain) onAte(kind);
   },
   hiddenTreat: () => treats.hiddenOne(),
   revealTreat: (t) => treats.reveal(t),
@@ -247,6 +251,25 @@ const dog = new Dog(scale, fx, {
 function remind(text: string, ms?: number): void {
   dog.remind(text, ms);
   if (soundOn && !dnd) bark(3);
+  say(text);
+}
+
+/** Lee el aviso en voz alta (sin los emojis). */
+function say(text: string): void {
+  if (!speakOn || dnd || !('speechSynthesis' in window)) return;
+  const clean = text.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim();
+  if (!clean) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = 'es-ES';
+    const voice = speechSynthesis.getVoices().find((v) => v.lang.startsWith('es'));
+    if (voice) u.voice = voice;
+    u.rate = 1.02;
+    speechSynthesis.speak(u);
+  } catch {
+    // Sin voz disponible: no pasa nada.
+  }
 }
 
 function measure(): void {
@@ -319,6 +342,23 @@ function handle(e: PetEvent): void {
     case 'laser':
       laserUntil = performance.now() + e.seconds * 1000;
       break;
+    case 'command': {
+      const ok = dog.command(e.cmd, e.chance);
+      if (ok) {
+        report('obeyed');
+        const praise = ['¡Hecho! 🐾', '¡Listo, jefe!', '¡Así? 🐶', '¡Mírame!'];
+        // Solo el globo: un aviso normal lo haría ladrar y deshacer la orden.
+        bubble.say(e.cmd === 'bark' ? '¡Guau! ¡Guau!' : e.cmd === 'stay' ? 'Quieto… 🧘 (no me muevo)' : praise[Math.floor(Math.random() * praise.length)], 2500);
+        if (e.cmd === 'bark' && soundOn && !dnd) bark(2);
+      } else {
+        const confused = ['¿Eh? 🤔', '¿Qué cosa?', 'Mmm… no entendí 🙃'];
+        bubble.say(confused[Math.floor(Math.random() * confused.length)], 2500);
+      }
+      break;
+    }
+    case 'treatRain':
+      startTreatRain(e.seconds);
+      break;
     case 'water': {
       remind(STR.water[Math.floor(Math.random() * STR.water.length)], 8000);
       waterAskedAt = performance.now();
@@ -332,10 +372,12 @@ function handle(e: PetEvent): void {
       break;
     case 'notice':
       dog.remind(e.text, e.text.includes('\n') ? 12_000 : 9000);
+      say(e.text);
       break;
     case 'settings':
       setSize(e.size);
       soundOn = e.sound;
+      speakOn = e.speak;
       dog.setLook(e.coat, e.outfit);
       look.coat = e.coat;
       look.outfit = e.outfit;
@@ -395,6 +437,41 @@ function onAte(kind: TreatKind | 'meal'): void {
     const h = dog.headOffset();
     for (let i = 0; i < 3; i++) fx.heart(h.x, h.y - 22 * scale, scale);
   }
+}
+
+/** Lluvia de premios: caen galletas al azar y el perro atrapa todas las que puede. */
+let rain: { score: number; timer: number; endsAt: number } | null = null;
+function startTreatRain(seconds: number): void {
+  if (rain) return;
+  rain = { score: 0, endsAt: performance.now() + seconds * 1000, timer: 0 };
+  dog.remind(`🌧️ ¡Lluvia de premios! ${seconds} segundos`, 2500);
+  const drop = (): void => {
+    if (!rain) return;
+    if (performance.now() > rain.endsAt) {
+      // Espera a que caigan los últimos y da el resultado.
+      window.setTimeout(finishTreatRain, 4500);
+      return;
+    }
+    const margin = 70 * scale;
+    treats.spawn(margin + Math.random() * (world.width - 2 * margin), scale, 'cookie', true);
+    rain.timer = window.setTimeout(drop, 700 + Math.random() * 700);
+  };
+  drop();
+}
+
+function finishTreatRain(): void {
+  if (!rain) return;
+  const score = rain.score;
+  rain = null;
+  let best = 0;
+  try {
+    best = Number(localStorage.getItem('pet.rainRecord') ?? 0);
+    if (score > best) localStorage.setItem('pet.rainRecord', String(score));
+  } catch {
+    // Sin almacenamiento: no hay récord.
+  }
+  report('play');
+  remind(score > best && best > 0 ? `🏆 ¡Récord! Atrapé ${score} premios` : `¡Atrapé ${score} premio${score === 1 ? '' : 's'}!${best ? ` (récord: ${Math.max(best, score)})` : ''}`, 5000);
 }
 
 /** Premios al azar para "sorpresa". */

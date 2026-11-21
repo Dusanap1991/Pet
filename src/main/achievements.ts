@@ -1,7 +1,7 @@
 /** Logros: contadores de toda la vida y medallas que se desbloquean una vez. */
 import { readJson, writeJson } from './store';
 
-export type Counter = 'pets' | 'water' | 'focus' | 'tasks' | 'treats' | 'play' | 'pomodoros' | 'reminders' | 'early' | 'files' | 'stretches' | 'waterGoals' | 'habits' | 'meals';
+export type Counter = 'pets' | 'water' | 'focus' | 'tasks' | 'treats' | 'play' | 'pomodoros' | 'reminders' | 'early' | 'files' | 'stretches' | 'waterGoals' | 'habits' | 'meals' | 'obeyed';
 
 export interface Achievement {
   id: string;
@@ -29,6 +29,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'streak-7', icon: '📅', title: 'Una semana', hint: '7 días seguidos', counter: 'streak', goal: 7 },
   { id: 'streak-30', icon: '🌟', title: 'Un mes juntos', hint: '30 días seguidos', counter: 'streak', goal: 30 },
   { id: 'meals-14', icon: '🍽️', title: 'Bien alimentado', hint: 'Sírvele comida 14 veces', counter: 'meals', goal: 14 },
+  { id: 'obeyed-25', icon: '🎓', title: 'Bien educado', hint: 'Que cumpla 25 órdenes', counter: 'obeyed', goal: 25 },
   { id: 'treats-20', icon: '🦴', title: 'Consentido', hint: '20 premios', counter: 'treats', goal: 20 },
   { id: 'play-20', icon: '🎾', title: 'Buscador', hint: 'Juega 20 veces a la pelota', counter: 'play', goal: 20 },
   { id: 'reminders-10', icon: '⏰', title: 'Memoria de elefante', hint: '10 recordatorios cumplidos', counter: 'reminders', goal: 10 },

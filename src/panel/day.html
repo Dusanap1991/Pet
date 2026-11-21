@@ -13,6 +13,7 @@
       <header>
         <h1 id="title">Mi día</h1>
         <p class="sub" id="date"></p>
+        <p class="sub" id="together"></p>
       </header>
 
       <section aria-labelledby="tasks-h">
@@ -30,6 +31,16 @@
         <ul id="habits" class="habits"></ul>
         <form id="add-habit" class="row" autocomplete="off">
           <input id="new-habit" class="grow" type="text" maxlength="40" placeholder="Nuevo hábito (ej.: ejercicio, leer)" aria-label="Nuevo hábito" />
+          <button type="submit">Agregar</button>
+        </form>
+      </section>
+
+      <section aria-labelledby="cd-h">
+        <h2 id="cd-h">Cuentas regresivas</h2>
+        <ul id="countdowns" class="countdowns"></ul>
+        <form id="add-cd" class="row" autocomplete="off">
+          <input id="cd-name" class="grow" type="text" maxlength="40" placeholder="Vacaciones, cumpleaños…" aria-label="Nombre del evento" />
+          <input id="cd-date" type="date" aria-label="Fecha" />
           <button type="submit">Agregar</button>
         </form>
       </section>
