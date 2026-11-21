@@ -3,136 +3,148 @@
     "quieto": {
       "file": "quieto.webm",
       "poster": "quieto.png",
-      "width": 502,
-      "height": 280,
-      "frames": 226,
+      "width": 756,
+      "height": 424,
+      "frames": 228,
       "fps": 24,
       "loop": true,
-      "anchorX": 272.34364152315186,
-      "anchorY": 269.0
+      "anchorX": 409.74030708411954,
+      "anchorY": 406.0,
+      "groundSpeed": null
     },
     "caminar": {
       "file": "caminar.webm",
       "poster": "caminar.png",
-      "width": 488,
-      "height": 270,
+      "width": 736,
+      "height": 406,
       "frames": 183,
       "fps": 24,
       "loop": true,
-      "anchorX": 260.8198861222162,
-      "anchorY": 255.0
+      "anchorX": 390.54059544063875,
+      "anchorY": 383.0,
+      "groundSpeed": 120.0
     },
     "correr": {
       "file": "correr.webm",
       "poster": "correr.png",
-      "width": 488,
-      "height": 266,
+      "width": 736,
+      "height": 400,
       "frames": 77,
       "fps": 24,
       "loop": true,
-      "anchorX": 264.02109233095126,
-      "anchorY": 250.0
+      "anchorX": 398.4078367881246,
+      "anchorY": 376.0,
+      "groundSpeed": 264.0
     },
     "sentarse": {
       "file": "sentarse.webm",
       "poster": "sentarse.png",
-      "width": 480,
-      "height": 258,
+      "width": 722,
+      "height": 390,
       "frames": 88,
       "fps": 24,
       "loop": false,
-      "anchorX": 267.5517559814744,
-      "anchorY": 248.0
+      "anchorX": 401.51740640918615,
+      "anchorY": 373.0,
+      "groundSpeed": null
     },
     "sentado": {
       "file": "sentado.webm",
       "poster": "sentado.png",
-      "width": 466,
-      "height": 282,
+      "width": 702,
+      "height": 426,
       "frames": 145,
       "fps": 24,
       "loop": true,
-      "anchorX": 260.09827749327343,
-      "anchorY": 271.0
+      "anchorX": 390.4183767378012,
+      "anchorY": 407.0,
+      "groundSpeed": null
     },
     "levantarse": {
       "file": "levantarse.webm",
       "poster": "levantarse.png",
-      "width": 480,
-      "height": 258,
+      "width": 722,
+      "height": 390,
       "frames": 88,
       "fps": 24,
       "loop": false,
-      "anchorX": 267.5517559814744,
-      "anchorY": 248.0
+      "anchorX": 401.5174064091863,
+      "anchorY": 373.0,
+      "groundSpeed": null
     },
     "echado": {
       "file": "echado.webm",
       "poster": "echado.png",
-      "width": 496,
-      "height": 262,
-      "frames": 96,
+      "width": 746,
+      "height": 410,
+      "frames": 207,
       "fps": 24,
       "loop": true,
-      "anchorX": 246.60899507210763,
-      "anchorY": 251.0
+      "anchorX": 370.1962203151706,
+      "anchorY": 390.0,
+      "groundSpeed": null
     },
     "dormir": {
       "file": "dormir.webm",
       "poster": "dormir.png",
-      "width": 468,
-      "height": 228,
+      "width": 704,
+      "height": 344,
       "frames": 96,
       "fps": 24,
       "loop": true,
-      "anchorX": 249.83527828773975,
-      "anchorY": 216.0
+      "anchorX": 376.0061767655004,
+      "anchorY": 325.0,
+      "groundSpeed": null
     },
     "olfatear": {
       "file": "olfatear.webm",
       "poster": "olfatear.png",
-      "width": 562,
-      "height": 226,
+      "width": 844,
+      "height": 340,
       "frames": 81,
       "fps": 24,
       "loop": true,
-      "anchorX": 296.31532728762335,
-      "anchorY": 211.0
+      "anchorX": 444.8055564888213,
+      "anchorY": 317.0,
+      "groundSpeed": 120.0
     },
     "comer": {
       "file": "comer.webm",
       "poster": "comer.png",
-      "width": 508,
-      "height": 272,
+      "width": 764,
+      "height": 410,
       "frames": 135,
       "fps": 24,
       "loop": false,
-      "anchorX": 279.24393381213764,
-      "anchorY": 252.0
+      "anchorX": 419.09359906060985,
+      "anchorY": 381.0,
+      "groundSpeed": null
     },
     "feliz": {
       "file": "feliz.webm",
       "poster": "feliz.png",
-      "width": 492,
-      "height": 274,
+      "width": 740,
+      "height": 412,
       "frames": 80,
       "fps": 24,
       "loop": true,
-      "anchorX": 282.3751705698661,
-      "anchorY": 260.0
+      "anchorX": 423.7406007988448,
+      "anchorY": 390.0,
+      "groundSpeed": null
     },
     "ladrar": {
       "file": "ladrar.webm",
       "poster": "ladrar.png",
-      "width": 510,
-      "height": 262,
-      "frames": 67,
+      "width": 768,
+      "height": 394,
+      "frames": 62,
       "fps": 24,
       "loop": true,
-      "anchorX": 279.49433508106796,
-      "anchorY": 250.0
+      "anchorX": 420.4065160266969,
+      "anchorY": 375.0,
+      "groundSpeed": null
     }
   },
-  "dogLengthPx": 470,
-  "workWidth": 640
+  "dogLengthPx": 705,
+  "workWidth": 960
 }
